@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sibratech · Índices</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  :root {
+    --red: #E10600;
+    --ink: #0B0B0B;
+    --gray-700: #5A6060;
+    --gray-300: #d9dada;
+    --gray-100: #F5F5F5;
+    --white: #FFFFFF;
+    --font: 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font); background: var(--gray-100); color: var(--ink); }
+  header { background: var(--ink); color: var(--white); padding: 14px 24px; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header h1 span { color: var(--red); }
+
+  .tabs { display: flex; gap: 4px; padding: 12px 24px 0; background: var(--white); border-bottom: 1px solid var(--gray-300); }
+  .tab-btn {
+    padding: 10px 18px; border: none; background: transparent; cursor: pointer;
+    font-size: 14px; font-weight: 600; color: var(--gray-700); border-bottom: 3px solid transparent;
+  }
+  .tab-btn.active { color: var(--red); border-bottom-color: var(--red); }
+
+  main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+  .ventana { display: none; }
+  .ventana.active { display: block; }
+
+  .controles {
+    display: flex; gap: 16px; flex-wrap: wrap; align-items: end;
+    background: var(--white); padding: 16px; border-radius: 8px; margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .campo { display: flex; flex-direction: column; gap: 4px; }
+  .campo label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray-700); }
+  .campo select { padding: 8px 10px; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 14px; min-width: 200px; }
+
+  .chart-box { background: var(--white); border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); height: 380px; }
+  .estado { font-size: 13px; color: var(--gray-700); margin: 8px 0; }
+  .error { color: var(--red); }
+</style>
+</head>
+<body>
+
+<header><h1>Sibratech <span>·</span> Índices en vivo</h1></header>
+
+<nav class="tabs" id="tabs"></nav>
+
+<main>
+  <div id="ventanas"></div>
+</main>
+
+<script>
+const API = 'http://localhost:8100';
+
+const INDICES_AJUSTE = [
+  { value: 'ninguno', label: 'Nominal (sin ajuste)' },
+  { value: 'cer', label: '÷ CER' },
+  { value: 'uva', label: '÷ UVA' },
+  { value: 'dolar_oficial', label: '÷ Dólar oficial' },
+  { value: 'dolar_blue', label: '÷ Dólar blue' },
+  { value: 'dolar_mep', label: '÷ Dólar MEP' },
+  { value: 'dolar_ccl', label: '÷ Dólar CCL' },
+  { value: 'dolar_mayorista', label: '÷ Dólar mayorista' },
+];
+
+const VENTANAS = [
+  { id: 'uocra', nombre: 'UOCRA', familia: 'uocra', proyectable: true },
+  { id: 'ripte', nombre: 'RIPTE', familia: 'ripte', proyectable: true },
+  { id: 'dolar', nombre: 'Dólar', familia: 'dolar', esDolar: true },
+  { id: 'materiales', nombre: 'Materiales', esMateriales: true },
+  { id: 'construccion', nombre: 'Construcción (CAC/INDEC)', familia: 'construccion', proyectable: true },
+  { id: 'rem', nombre: 'Proyecciones (REM)', esRem: true },
+];
+
+const REM_SERIES = [
+  { value: 'ipc', label: 'Inflación (IPC, var. % mensual)' },
+  { value: 'fx', label: 'Tipo de cambio ($/USD)' },
+];
+
+const tabsEl = document.getElementById('tabs');
+const ventanasEl = document.getElementById('ventanas');
+let proveedoresMateriales = {};
+
+function crearSelect(id, opciones, labelKey, valueKey) {
+  const opts = opciones.map(o =>
+    `<option value="${o[valueKey]}">${o[labelKey]}</option>`
+  ).join('');
+  return `<select id="${id}">${opts}</select>`;
+}
+
+function render() {
+  tabsEl.innerHTML = VENTANAS.map((v, i) =>
+    `<button class="tab-btn${i === 0 ? ' active' : ''}" data-id="${v.id}">${v.nombre}</button>`
+  ).join('');
+
+  ventanasEl.innerHTML = VENTANAS.map((v, i) => `
+    <section class="ventana${i === 0 ? ' active' : ''}" id="ventana-${v.id}">
+      <div class="controles">
+        ${v.esMateriales ? `
+          <div class="campo">
+            <label>Proveedor</label>
+            <select id="sel-prov-${v.id}"></select>
+          </div>
+        ` : ''}
+        ${v.esRem ? `
+          <div class="campo">
+            <label>Serie</label>
+            ${crearSelect(`sel-rem-${v.id}`, REM_SERIES, 'label', 'value')}
+          </div>
+        ` : `
+          <div class="campo">
+            <label>Ajustar por</label>
+            ${crearSelect(`sel-ajuste-${v.id}`, INDICES_AJUSTE, 'label', 'value')}
+          </div>
+        `}
+        ${v.proyectable ? `
+          <div class="campo">
+            <label>&nbsp;</label>
+            <label style="flex-direction:row;align-items:center;gap:6px;font-size:13px;text-transform:none;color:var(--ink)">
+              <input type="checkbox" id="chk-proy-${v.id}"> Ver proyección (CER/dólar + REM)
+            </label>
+          </div>
+        ` : ''}
+      </div>
+      <div class="estado" id="estado-${v.id}"></div>
+      <div class="chart-box"><canvas id="chart-${v.id}"></canvas></div>
+    </section>
+  `).join('');
+
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.ventana').forEach(v => v.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(`ventana-${btn.dataset.id}`).classList.add('active');
+      cargarVentana(VENTANAS.find(v => v.id === btn.dataset.id));
+    });
+  });
+
+  document.querySelectorAll('input[id^="chk-proy-"]').forEach(chk => {
+    chk.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `chk-proy-${v.id}` === chk.id)));
+  });
+}
+
+const charts = {};
+
+function dibujar(id, puntos, puntosProy) {
+  const ctx = document.getElementById(`chart-${id}`);
+  if (charts[id]) charts[id].destroy();
+
+  const labels = [...puntos.map(p => p.fecha), ...(puntosProy || []).map(p => p.fecha)];
+  const datasets = [{
+    label: 'Histórico',
+    data: [...puntos.map(p => p.valor), ...Array((puntosProy || []).length).fill(null)],
+    borderColor: '#E10600',
+    backgroundColor: 'rgba(225,6,0,0.08)',
+    pointRadius: 0,
+    borderWidth: 2,
+    tension: 0.15,
+    fill: true,
+  }];
+
+  if (puntosProy && puntosProy.length) {
+    const relleno = Array(Math.max(puntos.length - 1, 0)).fill(null);
+    const ultimo = puntos.length ? [puntos[puntos.length - 1].valor] : [];
+    datasets.push({
+      label: 'Proyección',
+      data: [...relleno, ...ultimo, ...puntosProy.map(p => p.valor)],
+      borderColor: '#5A6060',
+      borderDash: [6, 4],
+      pointRadius: 0,
+      borderWidth: 2,
+      tension: 0.15,
+      fill: false,
+    });
+  }
+
+  charts[id] = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { x: { ticks: { maxTicksLimit: 10 } } },
+      plugins: { legend: { display: !!(puntosProy && puntosProy.length) } },
+    },
+  });
+}
+
+async function cargarVentana(v) {
+  const estadoEl = document.getElementById(`estado-${v.id}`);
+  estadoEl.textContent = 'Cargando…';
+  estadoEl.classList.remove('error');
+
+  if (v.esRem) {
+    const tipo = document.getElementById(`sel-rem-${v.id}`).value;
+    try {
+      const r = await fetch(`${API}/api/rem/${tipo}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const { relevamiento, curva } = await r.json();
+      if (!curva || curva.length === 0) {
+        estadoEl.textContent = 'Sin datos todavía (correr el refresh de REM).';
+        dibujar(v.id, []);
+        return;
+      }
+      const puntos = curva.map(c => ({ fecha: c.PERIODO, valor: c.MEDIANA }));
+      estadoEl.textContent = `Relevamiento del ${relevamiento} · previsión mediana a ${puntos.length} meses`;
+      dibujar(v.id, puntos);
+    } catch (err) {
+      estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
+      estadoEl.classList.add('error');
+    }
+    return;
+  }
+
+  if (v.esMateriales) {
+    const selProv = document.getElementById(`sel-prov-${v.id}`);
+    if (!selProv.options.length) {
+      selProv.innerHTML = Object.entries(proveedoresMateriales)
+        .map(([id, nombre]) => `<option value="${id}">${nombre}</option>`).join('');
+      selProv.addEventListener('change', () => cargarVentana(v));
+    }
+  }
+
+  const ajuste = document.getElementById(`sel-ajuste-${v.id}`).value;
+  const familia = v.esMateriales
+    ? `mat:${document.getElementById(`sel-prov-${v.id}`).value}`
+    : v.familia;
+
+  if (!familia || familia === 'mat:undefined') {
+    estadoEl.textContent = 'Sin datos disponibles todavía.';
+    return;
+  }
+
+  try {
+    const r = await fetch(`${API}/api/ajustar?familia=${encodeURIComponent(familia)}&indice=${ajuste}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const puntos = await r.json();
+    if (!Array.isArray(puntos) || puntos.length === 0) {
+      estadoEl.textContent = 'Sin datos para esta combinación todavía.';
+      dibujar(v.id, []);
+      return;
+    }
+    let textoEstado = `${puntos.length} puntos · último: ${puntos[puntos.length - 1].fecha}`;
+    let puntosProy = null;
+
+    const chkProy = v.proyectable && document.getElementById(`chk-proy-${v.id}`);
+    if (chkProy && chkProy.checked) {
+      try {
+        const rp = await fetch(`${API}/api/proyectar?familia=${encodeURIComponent(v.familia)}`);
+        const dataProy = await rp.json();
+        if (rp.ok && dataProy.proyeccion && dataProy.proyeccion.length) {
+          puntosProy = dataProy.proyeccion;
+          const r2 = (dataProy.modelo.r2 * 100).toFixed(0);
+          textoEstado += ` · proyección R²=${r2}% (relación histórica c/ CER y dólar, ${dataProy.modelo.n_obs} meses)`;
+        } else {
+          textoEstado += ` · proyección no disponible: ${dataProy.error || 'sin datos'}`;
+        }
+      } catch (errProy) {
+        textoEstado += ' · no se pudo calcular la proyección';
+      }
+    }
+
+    estadoEl.textContent = textoEstado;
+    dibujar(v.id, puntos, puntosProy);
+  } catch (err) {
+    estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
+    estadoEl.classList.add('error');
+  }
+}
+
+async function init() {
+  render();
+  try {
+    const r = await fetch(`${API}/api/materiales/proveedores`);
+    proveedoresMateriales = await r.json();
+  } catch (err) {
+    proveedoresMateriales = {};
+  }
+  document.querySelectorAll('select[id^="sel-ajuste-"]').forEach(sel => {
+    sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-ajuste-${v.id}` === sel.id)));
+  });
+  document.querySelectorAll('select[id^="sel-rem-"]').forEach(sel => {
+    sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-rem-${v.id}` === sel.id)));
+  });
+  cargarVentana(VENTANAS[0]);
+}
+
+init();
+</script>
+</body>
+</html>
