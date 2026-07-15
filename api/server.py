@@ -44,6 +44,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import sheets
 from ajuste import ajustar
 from proyeccion import estimar_modelo, proyectar
+from rem_estimaciones import construir_curva_mensual, resumen_por_anio
+from resumen import resumen_serie
+from resumen import variacion as calcular_variacion
 from scrapers import argentinadatos, bcra, bcra_rem, camarco, dolares, investing, ripte, tim, uocra
 
 load_dotenv()
@@ -99,6 +102,36 @@ DOLAR_COLUMNAS = {
     "dolar_mayorista": "MAYORISTA_VENTA",
 }
 
+# Familias con más de una columna elegible dentro de la misma hoja (ej.
+# "construccion:MATERIALES" o "cac:MANO_DE_OBRA") — se suman a SERIES, que
+# solo permite una columna fija por familia.
+SERIES_MULTI_COLUMNA = {
+    "construccion": {"tab": "CONSTRUCCION", "fecha_col": "FECHA",
+                      "columnas": ["INDICE_GENERAL", "MATERIALES", "MANO_DE_OBRA", "PROVISIONES"]},
+    "cac": {"tab": "CAC", "fecha_col": "FECHA",
+            "columnas": ["COSTO_CONSTRUCCION", "MATERIALES", "MANO_DE_OBRA"]},
+}
+
+# Series que aparecen en la tabla Resumen (nombre visible -> familia resoluble
+# por _resolver_familia). Réplica de la hoja "Resumen Indices" del Excel.
+RESUMEN_SERIES = [
+    ("UOCRA Oficial", "uocra"),
+    ("RIPTE", "ripte"),
+    ("Dólar oficial", "dolar:dolar_oficial"),
+    ("Dólar blue", "dolar:dolar_blue"),
+    ("Dólar MEP", "dolar:dolar_mep"),
+    ("CER", "cer"),
+    ("UVA", "uva"),
+    ("UVI", "uvi"),
+    ("ICL (alquileres)", "icl"),
+    ("CAC costo construcción", "cac:COSTO_CONSTRUCCION"),
+    ("CAC materiales", "cac:MATERIALES"),
+    ("CAC mano de obra", "cac:MANO_DE_OBRA"),
+    ("Construcción general (APYMECO)", "construccion:INDICE_GENERAL"),
+    ("Riesgo país", "riesgo_pais"),
+    ("MERVAL", "merval"),
+]
+
 # Proveedores de materiales ya cargados en Obra vía el pipeline de Gmail
 # (ver sibra-obra-repo/api/PARSERS_LOG.md). Che Camba y Electropunto quedan
 # pendientes hasta tener su parser configurado en Obra.
@@ -115,6 +148,11 @@ PROVEEDORES_MATERIALES = {
 REM_TABS = {"ipc": "REM_IPC", "fx": "REM_FX"}
 REM_HEADERS = ["CLAVE", "FECHA_PRONOSTICO", "PERIODO", "MEDIANA", "PROMEDIO",
                "DESVIO", "MAXIMO", "MINIMO", "PERCENTIL_90"]
+# Interanual a CUALQUIER mes objetivo (dic = año calendario completo; otros
+# meses = 12/24 meses hacia adelante desde la encuesta) — ver scrapers/bcra_rem.py
+REM_INTERANUAL_TAB = "REM_IPC_INTERANUAL"
+REM_INTERANUAL_HEADERS = ["CLAVE", "FECHA_PRONOSTICO", "PERIODO", "MEDIANA", "PROMEDIO",
+                          "DESVIO", "MAXIMO", "MINIMO", "PERCENTIL_90"]
 
 
 def _sheet_id():
@@ -141,6 +179,46 @@ def get_dolar():
 
 # ── Materiales (leídos de Obra, no de nuestra Sheet) ────────────────────────
 
+# Materiales curados por proveedor: si un proveedor aparece acá, el selector
+# de la ventana Materiales SOLO ofrece estos ítems (no "todos los que
+# cotizó alguna vez", que mezclaba productos sin relación) — el resto de los
+# proveedores sin curar todavía muestran todos los ítems descubiertos, como
+# antes. Se completa a pedido de Juan a medida que define qué necesita de
+# cada proveedor.
+MATERIALES_CURADOS = {
+    "43": [  # Cerámica Norte
+        "CEMENTO PORTLAND X 25 KG. (LOMA NEGRA)-25",
+        "HIERRO Aº TORS.Ø 10-BR X 12MT.",
+        "LADRILLO HUECO DE 1º 18X18X25-5",
+    ],
+    # "64": [...]  # SERINAR — caño Awaduct 110mm x 4mts pedido por Juan,
+    #                todavía no aparece en ninguna cotización cargada (solo
+    #                hay accesorios de 50/63mm) — pendiente hasta que llegue
+    #                un mail con ese ítem.
+}
+
+
+def _cotizaciones_material(id_proveedor: str, descripcion: str | None = None) -> list[dict]:
+    """Cotizaciones en vivo de Obra (pipeline de mail, vía COTIZACIONES)
+    SUPERPUESTAS con el histórico propio cargado a mano en
+    MATERIALES_HISTORICO (seed del Excel de Juan) — una sola serie por
+    (proveedor, material), el histórico rellena lo viejo y COTIZACIONES
+    sigue sumando lo nuevo sin que haya que volver a tocar el histórico."""
+    vivo = [
+        r for r in sheets.read_records(sheets.OBRA_PRECIOS_SHEET_ID, "COTIZACIONES",
+                                        cache_key=f"obra_cotizaciones:{id_proveedor}")
+        if str(r.get("ID_PROVEEDOR")) == id_proveedor
+    ]
+    historico = [
+        r for r in sheets.read_records(_sheet_id(), "MATERIALES_HISTORICO")
+        if str(r.get("ID_PROVEEDOR")) == id_proveedor
+    ]
+    combinado = historico + vivo
+    if descripcion:
+        combinado = [r for r in combinado if r.get("DESCRIPCION") == descripcion]
+    return combinado
+
+
 @app.route("/api/materiales/proveedores")
 def get_proveedores():
     return jsonify(PROVEEDORES_MATERIALES)
@@ -150,12 +228,30 @@ def get_proveedores():
 def get_materiales(id_proveedor):
     if id_proveedor not in PROVEEDORES_MATERIALES:
         return jsonify({"error": "proveedor no reconocido o sin parser todavía"}), 404
-    records = sheets.read_records(
-        sheets.OBRA_PRECIOS_SHEET_ID, "COTIZACIONES",
-        cache_key=f"obra_cotizaciones:{id_proveedor}",
-    )
-    filtradas = [r for r in records if str(r.get("ID_PROVEEDOR")) == id_proveedor]
-    return jsonify(filtradas)
+    return jsonify(_cotizaciones_material(id_proveedor))
+
+
+@app.route("/api/materiales/<id_proveedor>/items")
+def get_materiales_items(id_proveedor):
+    """Lista de materiales elegibles para ese proveedor. Si está curado
+    (MATERIALES_CURADOS), son exactamente esos — si no, se descubren todos
+    los que tengan al menos una cotización (comportamiento previo)."""
+    if id_proveedor not in PROVEEDORES_MATERIALES:
+        return jsonify({"error": "proveedor no reconocido o sin parser todavía"}), 404
+
+    registros = _cotizaciones_material(id_proveedor)
+    conteo: dict[str, int] = {}
+    for r in registros:
+        desc = r.get("DESCRIPCION")
+        if desc:
+            conteo[desc] = conteo.get(desc, 0) + 1
+
+    curados = MATERIALES_CURADOS.get(id_proveedor)
+    if curados:
+        items = [{"descripcion": d, "cotizaciones": conteo.get(d, 0)} for d in curados]
+    else:
+        items = [{"descripcion": d, "cotizaciones": n} for d, n in sorted(conteo.items())]
+    return jsonify(items)
 
 
 # ── REM (previsiones BCRA: IPC y tipo de cambio) ────────────────────────────
@@ -181,6 +277,61 @@ def get_rem(tipo):
         return jsonify({"error": f"tipo desconocido: {tipo} (usar 'ipc' o 'fx')"}), 404
     relevamiento, curva = _curva_rem_actual(tipo)
     return jsonify({"relevamiento": relevamiento, "curva": curva})
+
+
+def _curva_rem_interanual() -> tuple[str | None, list[dict]]:
+    """Curva interanual completa (cualquier mes objetivo) del relevamiento
+    MÁS RECIENTE — incluye tanto los "dic-YY" (año calendario completo) como
+    los anclajes intermedios ("jun-YY", 12/24 meses hacia adelante)."""
+    records = sheets.read_records(_sheet_id(), REM_INTERANUAL_TAB)
+    if not records:
+        return None, []
+    ultima_fecha = max(r["FECHA_PRONOSTICO"] for r in records)
+    curva = [
+        {"PERIODO": r["PERIODO"], "MEDIANA": float(r["MEDIANA"])}
+        for r in records if r["FECHA_PRONOSTICO"] == ultima_fecha
+    ]
+    return ultima_fecha, curva
+
+
+@app.route("/api/rem/anual")
+def get_rem_anual():
+    """Solo el subconjunto "dic-YY" (año calendario completo) de la curva
+    interanual — la vista simple "cuánto se espera para todo el año"."""
+    relevamiento, curva = _curva_rem_interanual()
+    anuales = [
+        {"anio": int(c["PERIODO"][:4]), "mediana": c["MEDIANA"]}
+        for c in curva if c["PERIODO"][5:7] == "12"
+    ]
+    return jsonify({"relevamiento": relevamiento, "curva": sorted(anuales, key=lambda a: a["anio"])})
+
+
+@app.route("/api/rem/estimaciones")
+def get_rem_estimaciones():
+    """Curva mensual continua: dato real de INDEC donde existe, curva mensual
+    explícita del REM donde el real todavía no llega, y para lo que ni uno
+    ni otro cubren, reparte parejo (raíz N-ésima) contra las anclas
+    interanuales del REM (dic/dic + 12/24 meses hacia adelante) — ver
+    api/rem_estimaciones.py para el detalle del armado."""
+    sid = _sheet_id()
+    relevamiento_anual, curva_interanual = _curva_rem_interanual()
+    if not curva_interanual:
+        return jsonify({"error": "no hay REM interanual cargado todavía (correr refresh de rem)"}), 422
+
+    _, curva_mensual_rem = _curva_rem_actual("ipc")
+    inflacion_real = sheets.read_records(sid, "INFLACION_INDEC")
+
+    reales = [{"PERIODO": r["FECHA"], "VALOR": r["VALOR"]} for r in inflacion_real]
+    rem_mensual = [{"PERIODO": r["PERIODO"], "MEDIANA": r["MEDIANA"]} for r in curva_mensual_rem]
+
+    curva = construir_curva_mensual(reales, rem_mensual, curva_interanual)
+    resumen_anual = resumen_por_anio(curva, curva_interanual)
+
+    return jsonify({
+        "relevamiento_anual": relevamiento_anual,
+        "curva": curva,
+        "resumen_anual": resumen_anual,
+    })
 
 
 # ── Proyección (relación histórica con CER/dólar + curva REM) ──────────────
@@ -214,13 +365,85 @@ def get_proyeccion():
 
 # ── Ajuste / comparación genérico ───────────────────────────────────────────
 
+# Materiales puntuales elegibles como divisor en el selector de ajuste (ej.
+# "hora de Oficial ÷ barra de hierro") — se toma el ÚLTIMO precio conocido
+# de cada uno vía el mismo merge_asof que ya usa ajuste.py, sin importar que
+# haya muchos más puntos de mano de obra que de material.
+INDICES_MATERIALES = {
+    "hierro": ("43", "HIERRO Aº TORS.Ø 10-BR X 12MT."),
+    "cemento": ("43", "CEMENTO PORTLAND X 25 KG. (LOMA NEGRA)-25"),
+    "ladrillo": ("43", "LADRILLO HUECO DE 1º 18X18X25-5"),
+}
+
+
+def _construir_indice_nivel(registros_pct: list[dict], fecha_col: str, valor_col: str, base: float = 100.0) -> list[dict]:
+    """CER/UVA ya vienen como nivel acumulado (un valor tipo 806.99), pero
+    INFLACION_INDEC solo tiene la variación % mensual — para poder usarlo
+    como divisor en /api/ajustar (que asume un nivel, no un %) hay que
+    encadenarlo en un índice propio (base 100 en la primera fecha de la
+    serie, igual criterio que usaba Juan en su Excel)."""
+    filas = sorted(registros_pct, key=lambda r: r[fecha_col])
+    nivel = base
+    resultado = []
+    for r in filas:
+        valor = r.get(valor_col)
+        if valor in (None, ""):
+            continue
+        nivel *= (1 + float(valor) / 100)
+        resultado.append({fecha_col: r[fecha_col], valor_col: round(nivel, 4)})
+    return resultado
+
+
 def _serie_indice(nombre_indice: str):
     """Devuelve (records, fecha_col, valor_col) para un nombre de índice elegible en el selector de ajuste."""
     if nombre_indice in ("cer", "uva"):
         cfg = SERIES[nombre_indice]
         return sheets.read_records(_sheet_id(), cfg["tab"]), cfg["fecha_col"], cfg["valor_col"]
+    if nombre_indice == "ipc":
+        cfg = SERIES["inflacion_indec"]
+        registros_pct = sheets.read_records(_sheet_id(), cfg["tab"])
+        nivel = _construir_indice_nivel(registros_pct, cfg["fecha_col"], cfg["valor_col"])
+        return nivel, cfg["fecha_col"], cfg["valor_col"]
     if nombre_indice in DOLAR_COLUMNAS:
         return sheets.read_records(_sheet_id(), DOLAR_TAB), "FECHA", DOLAR_COLUMNAS[nombre_indice]
+    if nombre_indice in INDICES_MATERIALES:
+        id_prov, descripcion = INDICES_MATERIALES[nombre_indice]
+        registros = _cotizaciones_material(id_prov, descripcion)
+        return registros, "FECHA", "PRECIO"
+    return None, None, None
+
+
+def _resolver_familia(familia: str, item: str | None = None):
+    """Devuelve (records, fecha_col, valor_col) para cualquier familia elegible:
+      - "cer", "uocra", ...        -> serie propia de SERIES (una columna fija)
+      - "construccion:MATERIALES"  -> columna elegida dentro de una hoja multi-columna
+      - "cac:MANO_DE_OBRA"
+      - "dolar:dolar_blue"         -> una cotización dentro de la hoja DOLAR
+      - "mat:43" (+ item=...)       -> cotizaciones de un proveedor de Obra, filtradas
+                                       opcionalmente a un material puntual (DESCRIPCION)
+    Devuelve (None, None, None) si no se reconoce."""
+    if familia in SERIES:
+        cfg = SERIES[familia]
+        return sheets.read_records(_sheet_id(), cfg["tab"]), cfg["fecha_col"], cfg["valor_col"]
+
+    if ":" in familia:
+        tipo, sub = familia.split(":", 1)
+
+        if tipo in SERIES_MULTI_COLUMNA:
+            cfg = SERIES_MULTI_COLUMNA[tipo]
+            col = sub if sub in cfg["columnas"] else cfg["columnas"][0]
+            return sheets.read_records(_sheet_id(), cfg["tab"]), cfg["fecha_col"], col
+
+        if tipo == "dolar":
+            col = DOLAR_COLUMNAS.get(sub)
+            if not col:
+                return None, None, None
+            return sheets.read_records(_sheet_id(), DOLAR_TAB), "FECHA", col
+
+        if tipo == "mat":
+            registros = _cotizaciones_material(sub, item)
+            return registros, "FECHA", "PRECIO"
+
     return None, None, None
 
 
@@ -228,20 +451,10 @@ def _serie_indice(nombre_indice: str):
 def get_ajustado():
     familia = request.args.get("familia")
     indice = request.args.get("indice", "ninguno")
+    item = request.args.get("item")
 
-    if familia in SERIES:
-        cfg = SERIES[familia]
-        base = sheets.read_records(_sheet_id(), cfg["tab"])
-        base_fecha, base_valor = cfg["fecha_col"], cfg["valor_col"]
-    elif familia and familia.startswith("mat:"):
-        id_prov = familia.split(":", 1)[1]
-        base = [
-            r for r in sheets.read_records(sheets.OBRA_PRECIOS_SHEET_ID, "COTIZACIONES",
-                                            cache_key=f"obra_cotizaciones:{id_prov}")
-            if str(r.get("ID_PROVEEDOR")) == id_prov
-        ]
-        base_fecha, base_valor = "FECHA", "PRECIO"
-    else:
+    base, base_fecha, base_valor = _resolver_familia(familia or "", item)
+    if base is None:
         return jsonify({"error": f"familia desconocida: {familia}"}), 404
 
     if indice == "ninguno":
@@ -253,6 +466,36 @@ def get_ajustado():
         resultado = ajustar(base, idx_records, base_fecha, base_valor, idx_fecha, idx_valor, modo="ratio")
 
     return jsonify(resultado)
+
+
+# ── Resumen (MTD/YTD/1A/5A/TIR + variación entre dos fechas cualquiera) ─────
+
+@app.route("/api/resumen")
+def get_resumen():
+    filas = []
+    for nombre, familia in RESUMEN_SERIES:
+        records, fecha_col, valor_col = _resolver_familia(familia)
+        r = resumen_serie(records or [], fecha_col or "FECHA", valor_col or "VALOR")
+        filas.append({"familia": familia, "nombre": nombre, **(r or {})})
+    return jsonify(filas)
+
+
+@app.route("/api/variacion")
+def get_variacion():
+    familia = request.args.get("familia")
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    if not (familia and desde and hasta):
+        return jsonify({"error": "faltan parámetros: familia, desde, hasta (YYYY-MM-DD)"}), 400
+
+    records, fecha_col, valor_col = _resolver_familia(familia)
+    if records is None:
+        return jsonify({"error": f"familia desconocida: {familia}"}), 404
+
+    r = calcular_variacion(records, fecha_col, valor_col, desde, hasta)
+    if r is None:
+        return jsonify({"error": "no hay datos suficientes en ese rango"}), 422
+    return jsonify(r)
 
 
 # ── Refresh manual + scheduler ──────────────────────────────────────────────
@@ -348,6 +591,12 @@ def refrescar_rem():
             f["CLAVE"] = f"{f['FECHA_PRONOSTICO']}|{f['PERIODO']}"
         n = sheets.upsert_series(sid, tab, REM_HEADERS, "CLAVE", filas)
         print(f"[scheduler] {tab} +{n} filas")
+
+    interanual = datos.get("ipc_interanual", [])
+    for f in interanual:
+        f["CLAVE"] = f"{f['FECHA_PRONOSTICO']}|{f['PERIODO']}"
+    n2 = sheets.upsert_series(sid, REM_INTERANUAL_TAB, REM_INTERANUAL_HEADERS, "CLAVE", interanual)
+    print(f"[scheduler] {REM_INTERANUAL_TAB} +{n2} filas")
 
 
 FUENTES_MANUALES = {

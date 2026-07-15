@@ -13,6 +13,7 @@
     --gray-300: #d9dada;
     --gray-100: #F5F5F5;
     --white: #FFFFFF;
+    --green: #0a7d2c;
     --font: 'Segoe UI', system-ui, sans-serif;
   }
   * { box-sizing: border-box; }
@@ -21,14 +22,14 @@
   header h1 { margin: 0; font-size: 18px; font-weight: 600; }
   header h1 span { color: var(--red); }
 
-  .tabs { display: flex; gap: 4px; padding: 12px 24px 0; background: var(--white); border-bottom: 1px solid var(--gray-300); }
+  .tabs { display: flex; gap: 4px; padding: 12px 24px 0; background: var(--white); border-bottom: 1px solid var(--gray-300); flex-wrap: wrap; }
   .tab-btn {
     padding: 10px 18px; border: none; background: transparent; cursor: pointer;
     font-size: 14px; font-weight: 600; color: var(--gray-700); border-bottom: 3px solid transparent;
   }
   .tab-btn.active { color: var(--red); border-bottom-color: var(--red); }
 
-  main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+  main { padding: 24px; max-width: 1200px; margin: 0 auto; }
   .ventana { display: none; }
   .ventana.active { display: block; }
 
@@ -39,11 +40,25 @@
   }
   .campo { display: flex; flex-direction: column; gap: 4px; }
   .campo label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray-700); }
-  .campo select { padding: 8px 10px; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 14px; min-width: 200px; }
+  .campo select, .campo input[type="date"] { padding: 8px 10px; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 14px; min-width: 200px; }
+  .campo select[multiple] { min-width: 300px; height: 110px; }
+  .campo button {
+    padding: 9px 16px; border: none; border-radius: 6px; background: var(--ink); color: var(--white);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .campo button:hover { opacity: 0.85; }
 
   .chart-box { background: var(--white); border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); height: 380px; }
   .estado { font-size: 13px; color: var(--gray-700); margin: 8px 0; }
   .error { color: var(--red); }
+
+  .tabla-wrap { overflow-x: auto; background: var(--white); border-radius: 8px; padding: 8px 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-top: 12px; }
+  table.tabla-resumen { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.tabla-resumen th, table.tabla-resumen td { padding: 9px 12px; text-align: right; border-bottom: 1px solid var(--gray-300); white-space: nowrap; }
+  table.tabla-resumen th:first-child, table.tabla-resumen td:first-child { text-align: left; }
+  table.tabla-resumen th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--gray-700); }
+  .pos { color: var(--green); font-weight: 600; }
+  .neg { color: var(--red); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -59,34 +74,89 @@
 <script>
 const API = 'http://localhost:8100';
 
+const RANGOS = [
+  { value: 'todo', label: 'Todo' },
+  { value: '5a', label: 'Últimos 5 años' },
+  { value: '1a', label: 'Último año' },
+  { value: '6m', label: 'Últimos 6 meses' },
+  { value: 'ytd', label: 'YTD (desde 1° enero)' },
+  { value: 'mtd', label: 'MTD (desde 1° del mes)' },
+  { value: '1m', label: 'Último mes' },
+];
+
+function filtrarPorRango(puntos, rango) {
+  if (!puntos || !puntos.length || !rango || rango === 'todo') return puntos;
+  const ultima = new Date(puntos[puntos.length - 1].fecha);
+  let desde;
+  switch (rango) {
+    case '5a': desde = new Date(ultima); desde.setFullYear(desde.getFullYear() - 5); break;
+    case '1a': desde = new Date(ultima); desde.setFullYear(desde.getFullYear() - 1); break;
+    case '6m': desde = new Date(ultima); desde.setMonth(desde.getMonth() - 6); break;
+    case 'ytd': desde = new Date(ultima.getFullYear(), 0, 1); break;
+    case 'mtd': desde = new Date(ultima.getFullYear(), ultima.getMonth(), 1); break;
+    case '1m': desde = new Date(ultima); desde.setMonth(desde.getMonth() - 1); break;
+    default: return puntos;
+  }
+  return puntos.filter(p => new Date(p.fecha) >= desde);
+}
+
 const INDICES_AJUSTE = [
   { value: 'ninguno', label: 'Nominal (sin ajuste)' },
   { value: 'cer', label: '÷ CER' },
   { value: 'uva', label: '÷ UVA' },
+  { value: 'ipc', label: '÷ IPC (INDEC)' },
   { value: 'dolar_oficial', label: '÷ Dólar oficial' },
   { value: 'dolar_blue', label: '÷ Dólar blue' },
   { value: 'dolar_mep', label: '÷ Dólar MEP' },
   { value: 'dolar_ccl', label: '÷ Dólar CCL' },
   { value: 'dolar_mayorista', label: '÷ Dólar mayorista' },
+  { value: 'hierro', label: '÷ Hierro (barra Ø10mm, Cerámica Norte)' },
+  { value: 'cemento', label: '÷ Cemento (bolsa 25kg Loma Negra, Cerámica Norte)' },
+  { value: 'ladrillo', label: '÷ Ladrillo hueco 18x18x25 (Cerámica Norte)' },
 ];
 
-const VENTANAS = [
-  { id: 'uocra', nombre: 'UOCRA', familia: 'uocra', proyectable: true },
-  { id: 'ripte', nombre: 'RIPTE', familia: 'ripte', proyectable: true },
-  { id: 'dolar', nombre: 'Dólar', familia: 'dolar', esDolar: true },
-  { id: 'materiales', nombre: 'Materiales', esMateriales: true },
-  { id: 'construccion', nombre: 'Construcción (CAC/INDEC)', familia: 'construccion', proyectable: true },
-  { id: 'rem', nombre: 'Proyecciones (REM)', esRem: true },
+const CONSTRUCCION_SERIES = [
+  { value: 'construccion:INDICE_GENERAL', label: 'Índice propio (APYMECO) · General' },
+  { value: 'construccion:MATERIALES', label: 'Índice propio (APYMECO) · Materiales' },
+  { value: 'construccion:MANO_DE_OBRA', label: 'Índice propio (APYMECO) · Mano de obra' },
+  { value: 'construccion:PROVISIONES', label: 'Índice propio (APYMECO) · Provisiones' },
+  { value: 'cac:COSTO_CONSTRUCCION', label: 'CAMARCO/CAC · Costo de construcción' },
+  { value: 'cac:MATERIALES', label: 'CAMARCO/CAC · Materiales' },
+  { value: 'cac:MANO_DE_OBRA', label: 'CAMARCO/CAC · Mano de obra' },
 ];
 
 const REM_SERIES = [
-  { value: 'ipc', label: 'Inflación (IPC, var. % mensual)' },
-  { value: 'fx', label: 'Tipo de cambio ($/USD)' },
+  { value: 'ipc', label: 'Inflación mensual (curva del REM, próximos ~7 meses)' },
+  { value: 'ipc_anual', label: 'Inflación anual (REM dic/dic, por año)' },
+  { value: 'combinada', label: 'Curva mensual combinada (real + REM + repartido)' },
+  { value: 'fx', label: 'Tipo de cambio ($/USD, curva próximos ~12 meses)' },
+];
+
+const FUENTE_LABEL = {
+  real: 'Real (INDEC)',
+  rem_mensual: 'REM (curva mensual)',
+  rem_interanual_repartido: 'Repartido (REM interanual)',
+};
+const FUENTE_COLOR = {
+  real: '#2EA043',
+  rem_mensual: '#1F6FEB',
+  rem_interanual_repartido: '#B08800',
+};
+
+const VENTANAS = [
+  { id: 'resumen', nombre: 'Resumen', esResumen: true },
+  { id: 'uocra', nombre: 'UOCRA', familia: 'uocra', nombreSerie: 'UOCRA · Oficial', proyectable: true, esUocra: true },
+  { id: 'ripte', nombre: 'RIPTE', familia: 'ripte', nombreSerie: 'RIPTE', proyectable: true },
+  { id: 'dolar', nombre: 'Dólar', familia: 'dolar', esDolar: true },
+  { id: 'materiales', nombre: 'Materiales', esMateriales: true },
+  { id: 'construccion', nombre: 'Construcción (CAC/INDEC)', familia: 'construccion', proyectable: true, esConstruccion: true },
+  { id: 'rem', nombre: 'Proyecciones (REM)', esRem: true },
 ];
 
 const tabsEl = document.getElementById('tabs');
 const ventanasEl = document.getElementById('ventanas');
 let proveedoresMateriales = {};
+let resumenFilas = [];
 
 function crearSelect(id, opciones, labelKey, valueKey) {
   const opts = opciones.map(o =>
@@ -100,39 +170,84 @@ function render() {
     `<button class="tab-btn${i === 0 ? ' active' : ''}" data-id="${v.id}">${v.nombre}</button>`
   ).join('');
 
-  ventanasEl.innerHTML = VENTANAS.map((v, i) => `
-    <section class="ventana${i === 0 ? ' active' : ''}" id="ventana-${v.id}">
-      <div class="controles">
-        ${v.esMateriales ? `
-          <div class="campo">
-            <label>Proveedor</label>
-            <select id="sel-prov-${v.id}"></select>
+  ventanasEl.innerHTML = VENTANAS.map((v, i) => {
+    if (v.esResumen) {
+      return `
+        <section class="ventana${i === 0 ? ' active' : ''}" id="ventana-${v.id}">
+          <div class="controles">
+            <div class="campo"><label>Desde</label><input type="date" id="resumen-desde"></div>
+            <div class="campo"><label>Hasta</label><input type="date" id="resumen-hasta"></div>
+            <div class="campo"><label>&nbsp;</label><button type="button" id="resumen-calcular">Calcular variación</button></div>
           </div>
-        ` : ''}
-        ${v.esRem ? `
-          <div class="campo">
-            <label>Serie</label>
-            ${crearSelect(`sel-rem-${v.id}`, REM_SERIES, 'label', 'value')}
+          <div class="estado" id="estado-${v.id}"></div>
+          <div class="tabla-wrap">
+            <table class="tabla-resumen">
+              <thead><tr>
+                <th>Índice</th><th>Último valor</th><th>Fecha</th>
+                <th>Mes (MoM)</th><th>Año (YTD)</th><th>Interanual (YoY)</th>
+                <th>YoY anualizada</th><th>5 años</th><th>Personalizado</th>
+              </tr></thead>
+              <tbody id="tbody-resumen"></tbody>
+            </table>
           </div>
-        ` : `
+        </section>`;
+    }
+
+    return `
+      <section class="ventana${i === 0 ? ' active' : ''}" id="ventana-${v.id}">
+        <div class="controles">
           <div class="campo">
-            <label>Ajustar por</label>
-            ${crearSelect(`sel-ajuste-${v.id}`, INDICES_AJUSTE, 'label', 'value')}
+            <label>Rango</label>
+            ${crearSelect(`sel-rango-${v.id}`, RANGOS, 'label', 'value')}
           </div>
-        `}
-        ${v.proyectable ? `
-          <div class="campo">
-            <label>&nbsp;</label>
-            <label style="flex-direction:row;align-items:center;gap:6px;font-size:13px;text-transform:none;color:var(--ink)">
-              <input type="checkbox" id="chk-proy-${v.id}"> Ver proyección (CER/dólar + REM)
-            </label>
-          </div>
-        ` : ''}
-      </div>
-      <div class="estado" id="estado-${v.id}"></div>
-      <div class="chart-box"><canvas id="chart-${v.id}"></canvas></div>
-    </section>
-  `).join('');
+          ${v.esMateriales ? `
+            <div class="campo">
+              <label>Proveedor</label>
+              <select id="sel-prov-${v.id}"></select>
+            </div>
+            <div class="campo">
+              <label>Material(es)</label>
+              <select id="sel-item-${v.id}" multiple></select>
+            </div>
+          ` : ''}
+          ${v.esDolar ? `
+            <div class="campo">
+              <label>Tipo de dólar</label>
+              ${crearSelect(`sel-dolartipo-${v.id}`, INDICES_AJUSTE.filter(o => o.value.startsWith('dolar_')), 'label', 'value')}
+            </div>
+          ` : ''}
+          ${v.esConstruccion ? `
+            <div class="campo">
+              <label>Serie</label>
+              ${crearSelect(`sel-construcciontipo-${v.id}`, CONSTRUCCION_SERIES, 'label', 'value')}
+            </div>
+          ` : ''}
+          ${v.esRem ? `
+            <div class="campo">
+              <label>Serie</label>
+              ${crearSelect(`sel-rem-${v.id}`, REM_SERIES, 'label', 'value')}
+            </div>
+          ` : `
+            <div class="campo">
+              <label>Ajustar por</label>
+              ${crearSelect(`sel-ajuste-${v.id}`, INDICES_AJUSTE, 'label', 'value')}
+            </div>
+          `}
+          ${v.proyectable ? `
+            <div class="campo">
+              <label>&nbsp;</label>
+              <label style="flex-direction:row;align-items:center;gap:6px;font-size:13px;text-transform:none;color:var(--ink)">
+                <input type="checkbox" id="chk-proy-${v.id}"> Ver proyección (CER/dólar + REM)
+              </label>
+            </div>
+          ` : ''}
+        </div>
+        <div class="estado" id="estado-${v.id}"></div>
+        <div class="chart-box"><canvas id="chart-${v.id}"></canvas></div>
+        ${v.esRem ? `<div id="rem-extra-${v.id}"></div>` : ''}
+        ${v.esUocra ? `<div id="uocra-vigentes"></div>` : ''}
+      </section>`;
+  }).join('');
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -150,26 +265,44 @@ function render() {
 }
 
 const charts = {};
+const PALETA = ['#E10600', '#1F6FEB', '#2EA043', '#B08800', '#8957E5', '#DA5C0C', '#0891B2', '#BE185D'];
 
-function dibujar(id, puntos, puntosProy) {
+// dibujar(id, series, puntosProy) — series: [{label, puntos: [{fecha,valor}]}]
+// Une las fechas de todas las series (spanGaps para las que no coinciden
+// exacto) y muestra tooltip con fecha + valor de cada serie al pasar el cursor.
+function dibujar(id, series, puntosProy) {
   const ctx = document.getElementById(`chart-${id}`);
   if (charts[id]) charts[id].destroy();
+  if (!series || !series.length) {
+    charts[id] = new Chart(ctx, { type: 'line', data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false } });
+    return;
+  }
 
-  const labels = [...puntos.map(p => p.fecha), ...(puntosProy || []).map(p => p.fecha)];
-  const datasets = [{
-    label: 'Histórico',
-    data: [...puntos.map(p => p.valor), ...Array((puntosProy || []).length).fill(null)],
-    borderColor: '#E10600',
-    backgroundColor: 'rgba(225,6,0,0.08)',
-    pointRadius: 0,
-    borderWidth: 2,
-    tension: 0.15,
-    fill: true,
-  }];
+  const fechas = new Set();
+  series.forEach(s => s.puntos.forEach(p => fechas.add(p.fecha)));
+  let labels = Array.from(fechas).sort();
+  const nHist = labels.length;
+  if (puntosProy && puntosProy.length) labels = [...labels, ...puntosProy.map(p => p.fecha)];
 
-  if (puntosProy && puntosProy.length) {
-    const relleno = Array(Math.max(puntos.length - 1, 0)).fill(null);
-    const ultimo = puntos.length ? [puntos[puntos.length - 1].valor] : [];
+  const datasets = series.map((s, i) => {
+    const mapa = new Map(s.puntos.map(p => [p.fecha, p.valor]));
+    return {
+      label: s.label,
+      data: labels.map(f => (mapa.has(f) ? mapa.get(f) : null)),
+      borderColor: PALETA[i % PALETA.length],
+      backgroundColor: 'transparent',
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      pointHitRadius: 8,
+      borderWidth: 2,
+      tension: 0.15,
+      spanGaps: true,
+    };
+  });
+
+  if (puntosProy && puntosProy.length && series.length === 1) {
+    const relleno = Array(Math.max(nHist - 1, 0)).fill(null);
+    const ultimo = series[0].puntos.length ? [series[0].puntos[series[0].puntos.length - 1].valor] : [];
     datasets.push({
       label: 'Proyección',
       data: [...relleno, ...ultimo, ...puntosProy.map(p => p.valor)],
@@ -178,7 +311,6 @@ function dibujar(id, puntos, puntosProy) {
       pointRadius: 0,
       borderWidth: 2,
       tension: 0.15,
-      fill: false,
     });
   }
 
@@ -187,20 +319,261 @@ function dibujar(id, puntos, puntosProy) {
     data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: (item) => {
+              if (item.raw === null || item.raw === undefined) return null;
+              const valor = Number(item.raw).toLocaleString('es-AR', { maximumFractionDigits: 4 });
+              return `${item.dataset.label}: ${valor}`;
+            },
+          },
+        },
+      },
       scales: { x: { ticks: { maxTicksLimit: 10 } } },
-      plugins: { legend: { display: !!(puntosProy && puntosProy.length) } },
     },
   });
+}
+
+// Curva mensual combinada (real + REM + repartido): puntos coloreados por
+// fuente + una segunda serie con el índice acumulado (base 100) en eje derecho.
+function dibujarCurvaCombinada(id, curva) {
+  const ctx = document.getElementById(`chart-${id}`);
+  if (charts[id]) charts[id].destroy();
+  if (!curva || !curva.length) {
+    charts[id] = new Chart(ctx, { type: 'line', data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false } });
+    return;
+  }
+
+  const labels = curva.map(c => c.periodo);
+  const colores = curva.map(c => FUENTE_COLOR[c.fuente] || '#5A6060');
+  let acumulado = 100;
+  const acumulados = curva.map(c => { acumulado *= (1 + c.valor_pct / 100); return acumulado; });
+
+  charts[id] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'IPC mensual (%)',
+          data: curva.map(c => c.valor_pct),
+          borderColor: '#5A6060',
+          backgroundColor: 'transparent',
+          pointBackgroundColor: colores,
+          pointBorderColor: colores,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          borderWidth: 1.5,
+          tension: 0.1,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Índice acumulado (base 100)',
+          data: acumulados,
+          borderColor: '#E10600',
+          backgroundColor: 'transparent',
+          pointRadius: 0,
+          borderWidth: 2,
+          tension: 0.1,
+          yAxisID: 'y1',
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            afterLabel: (item) => item.datasetIndex === 0
+              ? `Fuente: ${FUENTE_LABEL[curva[item.dataIndex].fuente] || ''}`
+              : null,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 12 } },
+        y: { position: 'left', title: { display: true, text: '% mensual' } },
+        y1: { position: 'right', title: { display: true, text: 'Índice (base 100)' }, grid: { drawOnChartArea: false } },
+      },
+    },
+  });
+}
+
+function sufijoDeAjuste(ajuste) {
+  if (!ajuste || ajuste === 'ninguno') return '';
+  const label = INDICES_AJUSTE.find(a => a.value === ajuste)?.label || ajuste;
+  return ` (${label})`;
+}
+
+async function cargarItemsMateriales(v) {
+  const idProv = document.getElementById(`sel-prov-${v.id}`).value;
+  const selItem = document.getElementById(`sel-item-${v.id}`);
+  selItem.innerHTML = '<option disabled>Cargando…</option>';
+  try {
+    const r = await fetch(`${API}/api/materiales/${idProv}/items`);
+    const items = await r.json();
+    selItem.innerHTML = items.map(it =>
+      `<option value="${it.descripcion}">${it.descripcion} (${it.cotizaciones})</option>`
+    ).join('');
+    if (selItem.options.length) selItem.options[0].selected = true;
+  } catch (err) {
+    selItem.innerHTML = '';
+  }
+}
+
+function fmtNum(v, dec = 2) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  return Number(v).toLocaleString('es-AR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+
+function fmtPct(v) {
+  if (v === null || v === undefined) return '—';
+  const signo = v > 0 ? '+' : '';
+  return `${signo}${v.toFixed(2)}%`;
+}
+
+function celdaPct(v) {
+  if (v === null || v === undefined) return '<td>—</td>';
+  const cls = v > 0 ? 'pos' : (v < 0 ? 'neg' : '');
+  return `<td class="${cls}">${fmtPct(v)}</td>`;
+}
+
+function pintarResumen(filas, personalizados) {
+  const tbody = document.getElementById('tbody-resumen');
+  tbody.innerHTML = filas.map(f => {
+    const p = personalizados ? personalizados[f.familia] : null;
+    return `<tr>
+      <td>${f.nombre}</td>
+      <td>${fmtNum(f.ultimo_valor, 4)}</td>
+      <td>${f.ultima_fecha || '—'}</td>
+      ${celdaPct(f.mom)}
+      ${celdaPct(f.ytd)}
+      ${celdaPct(f.yoy)}
+      ${celdaPct(f.yoy_anualizada)}
+      ${celdaPct(f.a5)}
+      ${p ? celdaPct(p.variacion_pct) : '<td>—</td>'}
+    </tr>`;
+  }).join('');
+}
+
+async function calcularPersonalizado() {
+  const desde = document.getElementById('resumen-desde').value;
+  const hasta = document.getElementById('resumen-hasta').value;
+  if (!desde || !hasta) return;
+  const estadoEl = document.getElementById('estado-resumen');
+  estadoEl.textContent = 'Calculando…';
+  try {
+    const resultados = await Promise.all(resumenFilas.map(async f => {
+      try {
+        const r = await fetch(`${API}/api/variacion?familia=${encodeURIComponent(f.familia)}&desde=${desde}&hasta=${hasta}`);
+        if (!r.ok) return [f.familia, null];
+        return [f.familia, await r.json()];
+      } catch { return [f.familia, null]; }
+    }));
+    const mapa = Object.fromEntries(resultados);
+    pintarResumen(resumenFilas, mapa);
+    estadoEl.textContent = `Variación personalizada: ${desde} → ${hasta}`;
+  } catch (err) {
+    estadoEl.textContent = 'No se pudo calcular la variación personalizada.';
+    estadoEl.classList.add('error');
+  }
+}
+
+async function obtenerEstimacionesRem() {
+  const r = await fetch(`${API}/api/rem/estimaciones`);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'error');
+  return data;
+}
+
+async function pintarResumenAnualRem(contId, data) {
+  const cont = document.getElementById(contId);
+  const resumen = data.resumen_anual || {};
+  if (!Object.keys(resumen).length) { cont.innerHTML = ''; return; }
+  const filas = Object.entries(resumen).map(([anio, e]) => `
+    <tr>
+      <td>${anio}</td>
+      <td>${fmtPct(e.rem_anual_pct)}</td>
+      <td>${e.real}</td>
+      <td>${e.rem_mensual}</td>
+      <td>${e.rem_interanual_repartido}</td>
+    </tr>`).join('');
+  cont.innerHTML = `
+    <div class="estado">Cada mes usa, en este orden: dato real de INDEC si ya se publicó, si no la curva mensual del último REM, y si tampoco eso llega, reparte parejo (raíz N-ésima) contra la ancla interanual del REM más cercana (dic/dic o 12/24 meses hacia adelante). Colores en la curva: <span style="color:${FUENTE_COLOR.real}">●</span> real · <span style="color:${FUENTE_COLOR.rem_mensual}">●</span> REM mensual · <span style="color:${FUENTE_COLOR.rem_interanual_repartido}">●</span> repartido.</div>
+    <div class="tabla-wrap">
+      <table class="tabla-resumen">
+        <thead><tr>
+          <th>Año</th><th>REM anual (dic/dic)</th><th>Meses reales (INDEC)</th>
+          <th>Meses curva REM</th><th>Meses repartidos</th>
+        </tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>`;
 }
 
 async function cargarVentana(v) {
   const estadoEl = document.getElementById(`estado-${v.id}`);
   estadoEl.textContent = 'Cargando…';
   estadoEl.classList.remove('error');
+  const rango = document.getElementById(`sel-rango-${v.id}`)?.value || 'todo';
+
+  if (v.esResumen) {
+    try {
+      const r = await fetch(`${API}/api/resumen`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      resumenFilas = await r.json();
+      pintarResumen(resumenFilas);
+      estadoEl.textContent = 'Actualizado';
+    } catch (err) {
+      estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
+      estadoEl.classList.add('error');
+    }
+    return;
+  }
 
   if (v.esRem) {
     const tipo = document.getElementById(`sel-rem-${v.id}`).value;
+    const extraEl = document.getElementById(`rem-extra-${v.id}`);
+    extraEl.innerHTML = '';
     try {
+      if (tipo === 'ipc_anual') {
+        const r = await fetch(`${API}/api/rem/anual`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const { relevamiento, curva } = await r.json();
+        if (!curva || !curva.length) {
+          estadoEl.textContent = 'Sin datos todavía (correr el refresh de REM).';
+          dibujar(v.id, []);
+          return;
+        }
+        const puntos = filtrarPorRango(curva.map(c => ({ fecha: `${c.anio}-01-01`, valor: c.mediana })), rango);
+        estadoEl.textContent = `Relevamiento del ${relevamiento} · inflación interanual a diciembre por año (equivale al acumulado del año calendario)`;
+        dibujar(v.id, [{ label: 'REM · inflación anual (dic/dic, %)', puntos }]);
+        const data = await obtenerEstimacionesRem();
+        await pintarResumenAnualRem(`rem-extra-${v.id}`, data);
+        return;
+      }
+      if (tipo === 'combinada') {
+        const data = await obtenerEstimacionesRem();
+        if (!data.curva || !data.curva.length) {
+          estadoEl.textContent = 'Sin datos todavía (correr el refresh de REM).';
+          dibujarCurvaCombinada(v.id, []);
+          return;
+        }
+        const curvaFiltrada = filtrarPorRango(
+          data.curva.map(c => ({ fecha: c.periodo, valor: c.valor_pct, fuente: c.fuente })), rango
+        );
+        const conteo = curvaFiltrada.reduce((acc, c) => { acc[c.fuente] = (acc[c.fuente] || 0) + 1; return acc; }, {});
+        const partes = Object.entries(conteo).map(([f, n]) => `${n} ${FUENTE_LABEL[f] || f}`).join(' · ');
+        estadoEl.textContent = `Curva mensual combinada (color de cada punto = fuente): ${partes}`;
+        dibujarCurvaCombinada(v.id, curvaFiltrada.map(c => ({ periodo: c.fecha, valor_pct: c.valor, fuente: c.fuente })));
+        await pintarResumenAnualRem(`rem-extra-${v.id}`, data);
+        return;
+      }
       const r = await fetch(`${API}/api/rem/${tipo}`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const { relevamiento, curva } = await r.json();
@@ -209,9 +582,10 @@ async function cargarVentana(v) {
         dibujar(v.id, []);
         return;
       }
-      const puntos = curva.map(c => ({ fecha: c.PERIODO, valor: c.MEDIANA }));
-      estadoEl.textContent = `Relevamiento del ${relevamiento} · previsión mediana a ${puntos.length} meses`;
-      dibujar(v.id, puntos);
+      const puntos = filtrarPorRango(curva.map(c => ({ fecha: c.PERIODO, valor: c.MEDIANA })), rango);
+      const nombreSerie = tipo === 'ipc' ? 'REM · inflación mensual esperada (%)' : 'REM · tipo de cambio esperado ($/USD)';
+      estadoEl.textContent = `Relevamiento del ${relevamiento} · curva mensual (próximos ~${puntos.length} meses, valor al último día de cada mes)`;
+      dibujar(v.id, [{ label: nombreSerie, puntos }]);
     } catch (err) {
       estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
       estadoEl.classList.add('error');
@@ -224,24 +598,66 @@ async function cargarVentana(v) {
     if (!selProv.options.length) {
       selProv.innerHTML = Object.entries(proveedoresMateriales)
         .map(([id, nombre]) => `<option value="${id}">${nombre}</option>`).join('');
-      selProv.addEventListener('change', () => cargarVentana(v));
+      selProv.addEventListener('change', async () => { await cargarItemsMateriales(v); cargarVentana(v); });
+      await cargarItemsMateriales(v);
     }
   }
 
-  const ajuste = document.getElementById(`sel-ajuste-${v.id}`).value;
-  const familia = v.esMateriales
-    ? `mat:${document.getElementById(`sel-prov-${v.id}`).value}`
-    : v.familia;
+  const ajuste = document.getElementById(`sel-ajuste-${v.id}`)?.value;
+  const sufijo = sufijoDeAjuste(ajuste);
 
-  if (!familia || familia === 'mat:undefined') {
+  if (v.esMateriales) {
+    const selItem = document.getElementById(`sel-item-${v.id}`);
+    const seleccionados = Array.from(selItem.selectedOptions).map(o => o.value);
+    if (!seleccionados.length) {
+      estadoEl.textContent = 'Elegí uno o más materiales de la lista.';
+      dibujar(v.id, []);
+      return;
+    }
+    const idProv = selProv().value;
+    try {
+      const resultados = await Promise.all(seleccionados.map(async item => {
+        const r = await fetch(`${API}/api/ajustar?familia=${encodeURIComponent('mat:' + idProv)}&item=${encodeURIComponent(item)}&indice=${ajuste}`);
+        if (!r.ok) return { label: item, puntos: [] };
+        return { label: item + sufijo, puntos: filtrarPorRango(await r.json(), rango) };
+      }));
+      const conDatos = resultados.filter(s => s.puntos.length);
+      if (!conDatos.length) {
+        estadoEl.textContent = 'Sin datos para estos materiales todavía.';
+        dibujar(v.id, []);
+        return;
+      }
+      const totalPuntos = conDatos.reduce((acc, s) => acc + s.puntos.length, 0);
+      estadoEl.textContent = `${conDatos.length} material(es) · ${totalPuntos} cotizaciones en total`;
+      dibujar(v.id, conDatos);
+    } catch (err) {
+      estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
+      estadoEl.classList.add('error');
+    }
+    return;
+  }
+
+  const familia = v.esDolar
+    ? `dolar:${document.getElementById(`sel-dolartipo-${v.id}`).value}`
+    : v.esConstruccion
+      ? document.getElementById(`sel-construcciontipo-${v.id}`).value
+      : v.familia;
+
+  if (!familia) {
     estadoEl.textContent = 'Sin datos disponibles todavía.';
     return;
   }
 
+  const nombreSerieBase = v.esDolar
+    ? (INDICES_AJUSTE.find(o => o.value === document.getElementById(`sel-dolartipo-${v.id}`).value)?.label.replace('÷ ', '') || 'Dólar')
+    : v.esConstruccion
+      ? (CONSTRUCCION_SERIES.find(o => o.value === familia)?.label || v.nombre)
+      : (v.nombreSerie || v.nombre);
+
   try {
     const r = await fetch(`${API}/api/ajustar?familia=${encodeURIComponent(familia)}&indice=${ajuste}`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const puntos = await r.json();
+    const puntos = filtrarPorRango(await r.json(), rango);
     if (!Array.isArray(puntos) || puntos.length === 0) {
       estadoEl.textContent = 'Sin datos para esta combinación todavía.';
       dibujar(v.id, []);
@@ -268,12 +684,55 @@ async function cargarVentana(v) {
     }
 
     estadoEl.textContent = textoEstado;
-    dibujar(v.id, puntos, puntosProy);
+    dibujar(v.id, [{ label: nombreSerieBase + sufijo, puntos }], puntosProy);
+    if (v.esUocra) await pintarValoresVigentesUocra();
   } catch (err) {
     estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
     estadoEl.classList.add('error');
   }
 }
+
+async function pintarValoresVigentesUocra() {
+  const cont = document.getElementById('uocra-vigentes');
+  if (!cont) return;
+  cont.innerHTML = '';
+  try {
+    const r = await fetch(`${API}/api/series/uocra`);
+    const registros = await r.json();
+    if (!registros.length) return;
+    const hoy = new Date().toISOString().slice(0, 10);
+    const vigentes = registros.filter(reg => reg.FECHA <= hoy).sort((a, b) => a.FECHA.localeCompare(b.FECHA));
+    if (!vigentes.length) return;
+    const ultimo = vigentes[vigentes.length - 1];
+
+    const categorias = [
+      ['Oficial Especializado', 'OFICIAL_ESPECIALIZADO', 'OFICIAL_ESPECIALIZADO_NO_REM'],
+      ['Oficial', 'OFICIAL', 'OFICIAL_NO_REM'],
+      ['Medio Oficial', 'MEDIO_OFICIAL', 'MEDIO_OFICIAL_NO_REM'],
+      ['Ayudante', 'AYUDANTE', 'AYUDANTE_NO_REM'],
+      ['Sereno', 'SERENO', 'SERENO_NO_REM'],
+    ];
+    const filas = categorias.map(([nombre, col, colNoRem]) => `
+      <tr>
+        <td>${nombre}</td>
+        <td>${ultimo[col] ? fmtNum(ultimo[col], 0) : '—'}</td>
+        <td>${ultimo[colNoRem] ? fmtNum(ultimo[colNoRem], 0) : '—'}</td>
+      </tr>`).join('');
+
+    cont.innerHTML = `
+      <div class="tabla-wrap">
+        <div class="estado" style="margin-top:0">Valores vigentes al ${ultimo.FECHA} (último dato con fecha ≤ hoy)</div>
+        <table class="tabla-resumen">
+          <thead><tr><th>Categoría</th><th>Básico</th><th>No remunerativo</th></tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div>`;
+  } catch (err) {
+    cont.innerHTML = '';
+  }
+}
+
+function selProv() { return document.getElementById('sel-prov-materiales'); }
 
 async function init() {
   render();
@@ -286,9 +745,22 @@ async function init() {
   document.querySelectorAll('select[id^="sel-ajuste-"]').forEach(sel => {
     sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-ajuste-${v.id}` === sel.id)));
   });
+  document.querySelectorAll('select[id^="sel-rango-"]').forEach(sel => {
+    sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-rango-${v.id}` === sel.id)));
+  });
+  document.querySelectorAll('select[id^="sel-dolartipo-"]').forEach(sel => {
+    sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-dolartipo-${v.id}` === sel.id)));
+  });
+  document.querySelectorAll('select[id^="sel-construcciontipo-"]').forEach(sel => {
+    sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-construcciontipo-${v.id}` === sel.id)));
+  });
   document.querySelectorAll('select[id^="sel-rem-"]').forEach(sel => {
     sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-rem-${v.id}` === sel.id)));
   });
+  document.querySelectorAll('select[id^="sel-item-"]').forEach(sel => {
+    sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-item-${v.id}` === sel.id)));
+  });
+  document.getElementById('resumen-calcular')?.addEventListener('click', calcularPersonalizado);
   cargarVentana(VENTANAS[0]);
 }
 

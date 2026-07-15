@@ -93,7 +93,7 @@ def actualizar_uocra():
 
 def actualizar_rem():
     datos = bcra_rem.fetch_rem()
-    for tipo, tab in (("ipc", "REM_IPC"), ("fx", "REM_FX")):
+    for tipo, tab in (("ipc", "REM_IPC"), ("fx", "REM_FX"), ("ipc_interanual", "REM_IPC_INTERANUAL")):
         filas = datos.get(tipo, [])
         p = exportar_tab(tab, filas)
         print(f"{tab} -> {len(filas)} filas -> {p}")

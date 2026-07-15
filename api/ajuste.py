@@ -22,6 +22,10 @@ def _to_df(records: list[dict], fecha_col: str, valor_col: str) -> pd.DataFrame:
     df["fecha"] = pd.to_datetime(df["fecha"])
     df["valor"] = pd.to_numeric(df["valor"], errors="coerce")
     df = df.dropna(subset=["valor"]).sort_values("fecha")
+    # CER (y algunas otras series del BCRA) se publican con proyección a
+    # futuro (hasta el 15 del mes próximo) — no graficarlas como si ya
+    # hubieran pasado.
+    df = df[df["fecha"] <= pd.Timestamp.now().normalize()]
     return df[["fecha", "valor"]]
 
 
@@ -52,7 +56,13 @@ def ajustar(
     if df_idx.empty:
         return []
 
-    merged = pd.merge_asof(df_base, df_idx, on="fecha", suffixes=("_base", "_idx"))
+    # direction="nearest" (no solo "backward"): con series de pocos puntos
+    # (ej. un material con una sola cotización) puede pasar que su única
+    # fecha quede DESPUÉS del último dato de la base — "backward" estricto
+    # dejaría esos puntos sin ningún índice para dividir; "nearest" usa el
+    # valor conocido más cercano en cualquier dirección, que es justamente
+    # "el último precio disponible" cuando no hay nada más reciente.
+    merged = pd.merge_asof(df_base, df_idx, on="fecha", suffixes=("_base", "_idx"), direction="nearest")
     merged = merged.dropna(subset=["valor_idx"])
     merged = merged[merged["valor_idx"] != 0]
     merged["resultado"] = merged["valor_base"] / merged["valor_idx"]

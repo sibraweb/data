@@ -7,11 +7,14 @@ JS) y lista los PDFs con una etiqueta clara ("Acuerdo 76/75 - abril 2026").
 
 OJO — inconsistencia real de la fuente: algunos PDFs traen la tabla del
 "ANEXO I" como texto real (parseable), otros la traen como una imagen
-escaneada pegada en el PDF (no parseable sin OCR, que no está instalado
-en este entorno). El scraper prueba varios de los PDFs más recientes y
-se queda con los meses que puede leer como texto; si un PDF resulta ser
-imagen, lo salta y lo reporta — esos meses quedan pendientes de carga
-manual, igual que antes.
+escaneada pegada en el PDF. Para esos últimos hay un fallback OCR
+(Tesseract vía pytesseract) — se activa solo si el binario y el paquete de
+idioma español están instalados (ver tessdata/ en la raíz del proyecto),
+si no, el comportamiento es el de siempre: se salta el PDF y queda para
+carga manual. El OCR pasa por la MISMA validación estricta (`_fila_valida`)
+que el texto normal — un mes con números mal reconocidos por el OCR se
+descarta igual que un PDF viejo con texto ruidoso, nunca se guarda un
+valor sospechoso.
 """
 
 from __future__ import annotations
@@ -19,10 +22,25 @@ from __future__ import annotations
 import hashlib
 import html
 import io
+import os
 import re
+from pathlib import Path
 
 import pdfplumber
 import requests
+
+try:
+    import pytesseract
+    TESSERACT_EXE = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    TESSDATA_DIR = Path(__file__).resolve().parent.parent / "tessdata"
+    if Path(TESSERACT_EXE).exists() and (TESSDATA_DIR / "spa.traineddata").exists():
+        pytesseract.pytesseract.tesseract_cmd = TESSERACT_EXE
+        os.environ["TESSDATA_PREFIX"] = str(TESSDATA_DIR)
+        OCR_DISPONIBLE = True
+    else:
+        OCR_DISPONIBLE = False
+except ImportError:
+    OCR_DISPONIBLE = False
 
 BASE = "https://uocra.org/"
 LISTADO_URL = "https://uocra.org/index.php?lang=1&s=nuevas-escalas-salariales"
@@ -153,10 +171,21 @@ def _fila_valida(fila: dict) -> bool:
     return oe >= of >= mo >= ay > 100 and se > ay * 10
 
 
+def _ocr_pagina(page) -> str:
+    """OCR de una página completa (300dpi) — solo se llama cuando la
+    extracción de texto normal dio poco o nada (imagen escaneada)."""
+    try:
+        img = page.to_image(resolution=300).original
+        return pytesseract.image_to_string(img, lang="spa")
+    except Exception:
+        return ""
+
+
 def fetch_uocra(max_pdfs: int = 6) -> list[dict]:
     urls = _listar_pdfs_76_75()[:max_pdfs]
     por_fecha: dict[str, dict] = {}
     saltados = []
+    via_ocr = []
 
     for url in urls:
         try:
@@ -169,8 +198,18 @@ def fetch_uocra(max_pdfs: int = 6) -> list[dict]:
                     # "ANEXO I" es substring de "ANEXO II" — hay que excluir
                     # explícitamente esa página (Canalización/Líneas/Empalme,
                     # no es la escala general que necesitamos).
-                    if re.match(r"ANEXO\s+(I(?!I)|1)\b", t.strip()):
-                        texto_anexo1 += t + "\n"
+                    if not re.match(r"ANEXO\s+(I(?!I)|1)\b", t.strip()):
+                        continue
+                    # Texto casi vacío (solo el título "ANEXO I") = imagen
+                    # escaneada pegada en el PDF — se intenta OCR si está
+                    # disponible; si no, sigue el comportamiento de siempre
+                    # (queda sin datos, se reporta como salteado).
+                    if len(t) < 200 and OCR_DISPONIBLE:
+                        t_ocr = _ocr_pagina(page)
+                        if t_ocr:
+                            t = t_ocr
+                            via_ocr.append(url)
+                    texto_anexo1 += t + "\n"
             filas = _parsear_anexo_i(texto_anexo1)
             if not filas:
                 saltados.append(url)
@@ -180,9 +219,11 @@ def fetch_uocra(max_pdfs: int = 6) -> list[dict]:
         except Exception as exc:
             saltados.append(f"{url} ({exc})")
 
+    if via_ocr:
+        print(f"[uocra] {len(set(via_ocr))} PDF(s) leídos por OCR (imagen escaneada, sin texto real)")
     if saltados:
-        print(f"[uocra] {len(saltados)} PDF(s) no se pudieron leer como texto (probable imagen escaneada), "
-              f"esos meses quedan para carga manual: {saltados}")
+        print(f"[uocra] {len(saltados)} PDF(s) no se pudieron leer (ni como texto ni por OCR, "
+              f"o el OCR no pasó la validación de sanidad), esos meses quedan para carga manual: {saltados}")
 
     return sorted(por_fecha.values(), key=lambda r: r["FECHA"])
 

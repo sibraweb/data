@@ -11,3 +11,7 @@ python-dotenv
 pandas
 numpy
 openpyxl
+pdfplumber
+xlrd
+pytesseract
+pypdfium2

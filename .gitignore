@@ -11,3 +11,6 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Paquete de idioma OCR (18MB, se descarga aparte, no va al repo)
+tessdata/

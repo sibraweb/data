@@ -13,6 +13,7 @@ Archivo: historico-relevamiento-expectativas-mercado.xlsx (hoja "Base de Datos C
 from __future__ import annotations
 
 import io
+import re
 
 import openpyxl
 import requests
@@ -28,6 +29,19 @@ VARIABLES = {
     "fx": ("Tipo de cambio nominal", "$/USD"),
 }
 
+# Interanual (i.a.) a CUALQUIER mes objetivo, no solo diciembre — el REM
+# publica "var. % i.a.; dic-26/27/28" (año calendario completo, dic/dic)
+# PERO TAMBIÉN "var. % i.a.; jun-27", "jun-28" (12 y 24 meses hacia adelante
+# desde una encuesta de junio) — esos son los anclajes intermedios que arman
+# una cadena semestral (dic-26, jun-27, dic-27, jun-28, dic-28...) en vez de
+# saltar de golpe año a año. Se capturan todos, sin asumir el mes.
+IPC_INTERANUAL_VARIABLE = "Precios minoristas (IPC nivel general; INDEC)"
+IPC_INTERANUAL_REGEX = re.compile(r"^var\. % i\.a\.; ([a-z]{3})-(\d{2})$")
+MESES_ABREV = {
+    "ene": 1, "feb": 2, "mar": 3, "abr": 4, "may": 5, "jun": 6,
+    "jul": 7, "ago": 8, "sep": 9, "oct": 10, "nov": 11, "dic": 12,
+}
+
 
 def _descargar() -> openpyxl.Workbook:
     r = requests.get(URL, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
@@ -36,12 +50,15 @@ def _descargar() -> openpyxl.Workbook:
 
 
 def fetch_rem() -> dict[str, list[dict]]:
-    """Devuelve {"ipc": [...], "fx": [...]}, cada fila:
-    {FECHA_PRONOSTICO, PERIODO, MEDIANA, PROMEDIO, DESVIO, MAXIMO, MINIMO, PERCENTIL_90}"""
+    """Devuelve {"ipc": [...], "fx": [...], "ipc_interanual": [...]}.
+    ipc/fx: {FECHA_PRONOSTICO, PERIODO, MEDIANA, PROMEDIO, DESVIO, MAXIMO, MINIMO, PERCENTIL_90}
+    ipc_interanual: ídem, pero PERIODO es el mes objetivo del interanual
+    (dic de cada año = año calendario completo; otros meses = 12/24 meses
+    hacia adelante desde la fecha de la encuesta)."""
     wb = _descargar()
     ws = wb["Base de Datos Completa"]
 
-    resultado: dict[str, list[dict]] = {"ipc": [], "fx": []}
+    resultado: dict[str, list[dict]] = {"ipc": [], "fx": [], "ipc_interanual": []}
     objetivo = {v: k for k, v in VARIABLES.items()}
 
     for row in ws.iter_rows(min_row=3, values_only=True):
@@ -49,20 +66,39 @@ def fetch_rem() -> dict[str, list[dict]]:
         if fecha_pron is None:
             continue
         variable, referencia = row[1], row[2]
-        clave = objetivo.get((variable, referencia))
-        if not clave:
-            continue
         periodo, mediana, promedio, desvio, maximo, minimo, p90 = row[3:10]
-        resultado[clave].append({
-            "FECHA_PRONOSTICO": fecha_pron.date().isoformat(),
-            "PERIODO": periodo.date().isoformat() if hasattr(periodo, "date") else periodo,
-            "MEDIANA": mediana,
-            "PROMEDIO": promedio,
-            "DESVIO": desvio,
-            "MAXIMO": maximo,
-            "MINIMO": minimo,
-            "PERCENTIL_90": p90,
-        })
+
+        clave = objetivo.get((variable, referencia))
+        if clave:
+            resultado[clave].append({
+                "FECHA_PRONOSTICO": fecha_pron.date().isoformat(),
+                "PERIODO": periodo.date().isoformat() if hasattr(periodo, "date") else periodo,
+                "MEDIANA": mediana,
+                "PROMEDIO": promedio,
+                "DESVIO": desvio,
+                "MAXIMO": maximo,
+                "MINIMO": minimo,
+                "PERCENTIL_90": p90,
+            })
+            continue
+
+        if variable == IPC_INTERANUAL_VARIABLE and referencia:
+            m = IPC_INTERANUAL_REGEX.match(str(referencia))
+            if m:
+                mes = MESES_ABREV.get(m.group(1))
+                if mes:
+                    anio = 2000 + int(m.group(2))
+                    resultado["ipc_interanual"].append({
+                        "FECHA_PRONOSTICO": fecha_pron.date().isoformat(),
+                        "PERIODO": f"{anio:04d}-{mes:02d}-01",
+                        "MEDIANA": mediana,
+                        "PROMEDIO": promedio,
+                        "DESVIO": desvio,
+                        "MAXIMO": maximo,
+                        "MINIMO": minimo,
+                        "PERCENTIL_90": p90,
+                    })
+
     return resultado
 
 
