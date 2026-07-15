@@ -16,6 +16,7 @@ https://www.cifrasonline.com.ar/indice-cac/ y tomar el link vigente.
 
 from __future__ import annotations
 
+import calendar
 import datetime as dt
 
 import requests
@@ -34,10 +35,15 @@ DENOMINACIONES = {
 
 
 def _serial_a_fecha(n) -> str | None:
+    """El archivo fuente marca cada mes con el día 1 (ej. 2024-12-01) — se
+    normaliza al ÚLTIMO día del mes (2024-12-31), mismo criterio que el
+    resto del proyecto usa para "valor vigente a fin de mes"."""
     if not isinstance(n, (int, float)) or not n:
         return None
     try:
-        return (dt.date(1899, 12, 30) + dt.timedelta(days=int(n))).isoformat()
+        fecha = dt.date(1899, 12, 30) + dt.timedelta(days=int(n))
+        ultimo_dia = calendar.monthrange(fecha.year, fecha.month)[1]
+        return fecha.replace(day=ultimo_dia).isoformat()
     except (OverflowError, ValueError):
         return None
 

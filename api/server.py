@@ -124,9 +124,9 @@ RESUMEN_SERIES = [
     ("UVA", "uva"),
     ("UVI", "uvi"),
     ("ICL (alquileres)", "icl"),
-    ("CAC costo construcción", "cac:COSTO_CONSTRUCCION"),
-    ("CAC materiales", "cac:MATERIALES"),
-    ("CAC mano de obra", "cac:MANO_DE_OBRA"),
+    ("CAMARCO costo construcción", "cac:COSTO_CONSTRUCCION"),
+    ("CAMARCO materiales", "cac:MATERIALES"),
+    ("CAMARCO mano de obra", "cac:MANO_DE_OBRA"),
     ("Construcción general (APYMECO)", "construccion:INDICE_GENERAL"),
     ("Riesgo país", "riesgo_pais"),
     ("MERVAL", "merval"),
@@ -543,7 +543,7 @@ def refrescar_cac():
     serie = camarco.fetch_cac()
     headers = ["FECHA", "COSTO_CONSTRUCCION", "MATERIALES", "MANO_DE_OBRA"]
     n = sheets.upsert_series(sid, "CAC", headers, "FECHA", serie)
-    print(f"[scheduler] CAC +{n} filas (cifrasonline no siempre tiene el último mes)")
+    print(f"[scheduler] CAC +{n} filas (CAMARCO/cifrasonline no siempre tiene el último mes)")
 
 
 def refrescar_uocra():
