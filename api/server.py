@@ -147,6 +147,7 @@ RESUMEN_SERIES = [
     ("UVA", "uva"),
     ("UVI", "uvi"),
     ("ICL (alquileres)", "icl"),
+    ("IPC (INDEC, índice)", "ipc_nivel"),
     ("CAMARCO costo construcción", "cac:COSTO_CONSTRUCCION"),
     ("CAMARCO materiales", "cac:MATERIALES"),
     ("CAMARCO mano de obra", "cac:MANO_DE_OBRA"),
@@ -426,10 +427,7 @@ def _serie_indice(nombre_indice: str):
         cfg = SERIES[nombre_indice]
         return sheets.read_records(_sheet_id(), cfg["tab"]), cfg["fecha_col"], cfg["valor_col"]
     if nombre_indice == "ipc":
-        cfg = SERIES["inflacion_indec"]
-        registros_pct = sheets.read_records(_sheet_id(), cfg["tab"])
-        nivel = _construir_indice_nivel(registros_pct, cfg["fecha_col"], cfg["valor_col"])
-        return nivel, cfg["fecha_col"], cfg["valor_col"]
+        return _resolver_familia("ipc_nivel")
     if nombre_indice in DOLAR_COLUMNAS:
         return sheets.read_records(_sheet_id(), DOLAR_TAB), "FECHA", DOLAR_COLUMNAS[nombre_indice]
     if nombre_indice in INDICES_MATERIALES:
@@ -451,7 +449,17 @@ def _resolver_familia(familia: str, item: str | None = None):
       - "dolar:dolar_blue"         -> una cotización dentro de la hoja DOLAR
       - "mat:43" (+ item=...)       -> cotizaciones de un proveedor de Obra, filtradas
                                        opcionalmente a un material puntual (DESCRIPCION)
+      - "ipc_nivel"                 -> IPC (INDEC) encadenado a nivel (base 100), igual
+                                       criterio que CER/UVA/UOCRA — para poder comparar
+                                       visualmente contra dólar/CAMARCO/APYMECO/salarios,
+                                       no solo usarlo como divisor
     Devuelve (None, None, None) si no se reconoce."""
+    if familia == "ipc_nivel":
+        cfg = SERIES["inflacion_indec"]
+        registros_pct = sheets.read_records(_sheet_id(), cfg["tab"])
+        nivel = _construir_indice_nivel(registros_pct, cfg["fecha_col"], cfg["valor_col"])
+        return nivel, cfg["fecha_col"], cfg["valor_col"]
+
     if familia in SERIES:
         cfg = SERIES[familia]
         return sheets.read_records(_sheet_id(), cfg["tab"]), cfg["fecha_col"], cfg["valor_col"]
