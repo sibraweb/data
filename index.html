@@ -114,6 +114,8 @@ const INDICES_AJUSTE = [
   { value: 'hierro', label: '÷ Hierro (barra Ø10mm, Cerámica Norte)' },
   { value: 'cemento', label: '÷ Cemento (bolsa 25kg Loma Negra, Cerámica Norte)' },
   { value: 'ladrillo', label: '÷ Ladrillo hueco 18x18x25 (Cerámica Norte)' },
+  { value: 'salarios:INDICE_TOTAL', label: '÷ Salario (INDEC, índice total)' },
+  { value: 'cac:COSTO_CONSTRUCCION', label: '÷ Costo de construcción (CAMARCO)' },
 ];
 
 const CONSTRUCCION_SERIES = [
@@ -136,6 +138,12 @@ const SALARIOS_SERIES = [
   { value: 'salarios:PUBLICO', label: 'Sector público' },
   { value: 'salarios:TOTAL_REGISTRADO', label: 'Total registrado (privado + público)' },
   { value: 'salarios:NO_REGISTRADO', label: 'Sector no registrado (estimado, EPH)' },
+];
+
+const ALQUILER_SERIES = [
+  { value: 'alquiler_caba:PROMEDIO', label: 'Promedio (2 y 3 ambientes)' },
+  { value: 'alquiler_caba:PRECIO_2_AMBIENTES', label: '2 ambientes' },
+  { value: 'alquiler_caba:PRECIO_3_AMBIENTES', label: '3 ambientes' },
 ];
 
 const REM_SERIES = [
@@ -164,6 +172,7 @@ const VENTANAS = [
   { id: 'materiales', nombre: 'Materiales', esMateriales: true },
   { id: 'construccion', nombre: 'Construcción (APYMECO/CAMARCO)', familia: 'construccion', proyectable: true, esConstruccion: true },
   { id: 'salarios', nombre: 'Salarios (INDEC)', familia: 'salarios:INDICE_TOTAL', esSalarios: true },
+  { id: 'alquiler', nombre: 'Alquiler CABA', familia: 'alquiler_caba:PROMEDIO', esAlquiler: true },
   { id: 'rem', nombre: 'Proyecciones (REM)', esRem: true },
   { id: 'obra', nombre: 'Cálculo de Obra', esObra: true },
 ];
@@ -339,6 +348,12 @@ function render() {
               ${crearSelect(`sel-salariostipo-${v.id}`, SALARIOS_SERIES, 'label', 'value')}
             </div>
           ` : ''}
+          ${v.esAlquiler ? `
+            <div class="campo">
+              <label>Serie</label>
+              ${crearSelect(`sel-alquilertipo-${v.id}`, ALQUILER_SERIES, 'label', 'value')}
+            </div>
+          ` : ''}
           ${v.esRem ? `
             <div class="campo">
               <label>Serie</label>
@@ -359,6 +374,7 @@ function render() {
             </div>
           ` : ''}
         </div>
+        ${v.esAlquiler ? `<p class="estado" style="color:var(--red)">Fuente discontinuada (Buenos Aires Data) — no hay datos después de agosto 2019. Sirve como referencia histórica, no para decisiones con precios de hoy.</p>` : ''}
         <div class="estado" id="estado-${v.id}"></div>
         <div class="chart-box"><canvas id="chart-${v.id}"></canvas></div>
         ${v.esRem ? `<div id="rem-extra-${v.id}"></div>` : ''}
@@ -895,7 +911,9 @@ async function cargarVentana(v) {
       ? document.getElementById(`sel-construcciontipo-${v.id}`).value
       : v.esSalarios
         ? document.getElementById(`sel-salariostipo-${v.id}`).value
-        : v.familia;
+        : v.esAlquiler
+          ? document.getElementById(`sel-alquilertipo-${v.id}`).value
+          : v.familia;
 
   if (!familia) {
     estadoEl.textContent = 'Sin datos disponibles todavía.';
@@ -908,7 +926,9 @@ async function cargarVentana(v) {
       ? (CONSTRUCCION_SERIES.find(o => o.value === familia)?.label || v.nombre)
       : v.esSalarios
         ? (SALARIOS_SERIES.find(o => o.value === familia)?.label || v.nombre)
-        : (v.nombreSerie || v.nombre);
+        : v.esAlquiler
+          ? (ALQUILER_SERIES.find(o => o.value === familia)?.label || v.nombre)
+          : (v.nombreSerie || v.nombre);
 
   try {
     const r = await fetch(`${API}/api/ajustar?familia=${encodeURIComponent(familia)}&indice=${ajuste}`);
@@ -1012,6 +1032,9 @@ async function init() {
   });
   document.querySelectorAll('select[id^="sel-salariostipo-"]').forEach(sel => {
     sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-salariostipo-${v.id}` === sel.id)));
+  });
+  document.querySelectorAll('select[id^="sel-alquilertipo-"]').forEach(sel => {
+    sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-alquilertipo-${v.id}` === sel.id)));
   });
   document.querySelectorAll('select[id^="sel-rem-"]').forEach(sel => {
     sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-rem-${v.id}` === sel.id)));

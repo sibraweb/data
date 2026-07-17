@@ -47,7 +47,7 @@ from proyeccion import estimar_modelo, proyectar
 from rem_estimaciones import construir_curva_mensual, resumen_por_anio
 from resumen import resumen_serie
 from resumen import variacion as calcular_variacion
-from scrapers import argentinadatos, bcra, bcra_rem, camarco, dolares, icc, investing, ripte, salarios, tim, uocra
+from scrapers import alquileres, argentinadatos, bcra, bcra_rem, camarco, dolares, icc, investing, ripte, salarios, tim, uocra
 
 load_dotenv()
 
@@ -80,6 +80,7 @@ SERIES = {
     "icc_buenos_aires": {"tab": "ICC_BUENOS_AIRES", "fecha_col": "FECHA", "valor_col": "GENERAL"},
     "icc_cordoba": {"tab": "ICC_CORDOBA", "fecha_col": "FECHA", "valor_col": "GENERAL"},
     "icc_santa_fe": {"tab": "ICC_SANTA_FE", "fecha_col": "FECHA", "valor_col": "GENERAL"},
+    "alquiler_caba": {"tab": "ALQUILER_CABA", "fecha_col": "FECHA", "valor_col": "PROMEDIO"},
 }
 
 # Series BCRA simples ("fecha"/"valor") que se vuelcan 1:1 a su propia hoja,
@@ -130,6 +131,8 @@ SERIES_MULTI_COLUMNA = {
                     "columnas": ["GENERAL", "MATERIALES", "MANO_DE_OBRA", "GASTOS"]},
     "icc_santa_fe": {"tab": "ICC_SANTA_FE", "fecha_col": "FECHA",
                      "columnas": ["GENERAL", "MATERIALES", "MANO_DE_OBRA", "GASTOS"]},
+    "alquiler_caba": {"tab": "ALQUILER_CABA", "fecha_col": "FECHA",
+                      "columnas": ["PROMEDIO", "PRECIO_2_AMBIENTES", "PRECIO_3_AMBIENTES"]},
 }
 
 # Series que aparecen en la tabla Resumen (nombre visible -> familia resoluble
@@ -150,6 +153,7 @@ RESUMEN_SERIES = [
     ("Construcción general (APYMECO)", "construccion:INDICE_GENERAL"),
     ("Índice de Salarios INDEC", "salarios:INDICE_TOTAL"),
     ("ICC Buenos Aires (costo construcción)", "icc_buenos_aires:GENERAL"),
+    ("Alquiler CABA (promedio, fuente 2013-2019)", "alquiler_caba:PROMEDIO"),
     ("Riesgo país", "riesgo_pais"),
     ("MERVAL", "merval"),
 ]
@@ -432,7 +436,11 @@ def _serie_indice(nombre_indice: str):
         id_prov, descripcion = INDICES_MATERIALES[nombre_indice]
         registros = _cotizaciones_material(id_prov, descripcion)
         return registros, "FECHA", "PRECIO"
-    return None, None, None
+    # Cualquier otra familia resoluble (ej. "salarios:INDICE_TOTAL",
+    # "cac:COSTO_CONSTRUCCION") sirve también como divisor — para poder
+    # armar ratios como "alquiler ÷ salario" o "alquiler ÷ costo de
+    # construcción" sin duplicar la lógica de resolución.
+    return _resolver_familia(nombre_indice)
 
 
 def _resolver_familia(familia: str, item: str | None = None):
@@ -585,6 +593,14 @@ def refrescar_icc():
         print(f"[scheduler] ICC_{clave} +{n} filas")
 
 
+def refrescar_alquileres():
+    sid = _sheet_id()
+    serie = alquileres.fetch_alquileres()
+    headers = ["FECHA", "PRECIO_2_AMBIENTES", "PRECIO_3_AMBIENTES", "PROMEDIO"]
+    n = sheets.upsert_series(sid, "ALQUILER_CABA", headers, "FECHA", serie)
+    print(f"[scheduler] ALQUILER_CABA +{n} filas (fuente discontinuada, no pasa de ago-2019)")
+
+
 def refrescar_uocra():
     sid = _sheet_id()
     headers = [
@@ -651,6 +667,7 @@ FUENTES_MANUALES = {
     "uocra": refrescar_uocra,
     "salarios": refrescar_salarios,
     "icc": refrescar_icc,
+    "alquileres": refrescar_alquileres,
 }
 
 
