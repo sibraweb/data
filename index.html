@@ -59,6 +59,7 @@
   table.tabla-resumen th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--gray-700); }
   .pos { color: var(--green); font-weight: 600; }
   .neg { color: var(--red); font-weight: 600; }
+  .ventana h3 { font-size: 15px; margin: 0 0 12px; color: var(--ink); border-bottom: 2px solid var(--red); padding-bottom: 6px; }
 </style>
 </head>
 <body>
@@ -151,6 +152,15 @@ const VENTANAS = [
   { id: 'materiales', nombre: 'Materiales', esMateriales: true },
   { id: 'construccion', nombre: 'Construcción (APYMECO/CAMARCO)', familia: 'construccion', proyectable: true, esConstruccion: true },
   { id: 'rem', nombre: 'Proyecciones (REM)', esRem: true },
+  { id: 'obra', nombre: 'Cálculo de Obra', esObra: true },
+];
+
+const CATEGORIAS_UOCRA = [
+  ['OFICIAL_ESPECIALIZADO', 'Oficial Especializado'],
+  ['OFICIAL', 'Oficial'],
+  ['MEDIO_OFICIAL', 'Medio Oficial'],
+  ['AYUDANTE', 'Ayudante'],
+  ['SERENO', 'Sereno'],
 ];
 
 const tabsEl = document.getElementById('tabs');
@@ -188,6 +198,94 @@ function render() {
                 <th>YoY anualizada</th><th>5 años</th><th>Personalizado</th>
               </tr></thead>
               <tbody id="tbody-resumen"></tbody>
+            </table>
+          </div>
+        </section>`;
+    }
+
+    if (v.esObra) {
+      const filasCategoria = CATEGORIAS_UOCRA.map(([col, nombre]) => `
+        <tr>
+          <td>${nombre}</td>
+          <td><input type="number" class="obra-cantidad" data-col="${col}" value="0" min="0" style="width:70px"></td>
+          <td class="obra-basico" data-col="${col}">—</td>
+          <td class="obra-basicok" data-col="${col}">—</td>
+          <td class="obra-subneto" data-col="${col}">—</td>
+          <td class="obra-subcon" data-col="${col}">—</td>
+        </tr>`).join('');
+
+      return `
+        <section class="ventana${i === 0 ? ' active' : ''}" id="ventana-${v.id}">
+          <h3>Cálculo rápido de mano de obra por plazo</h3>
+          <div class="controles">
+            <div class="campo"><label>Meses</label><input type="number" id="obra-meses" value="1" min="0" style="width:90px"></div>
+            <div class="campo"><label>Días por mes</label><input type="number" id="obra-dias" value="5" min="0" style="width:90px"></div>
+            <div class="campo"><label>Horas por día</label><input type="number" id="obra-horas" value="8" min="0" style="width:90px"></div>
+            <div class="campo"><label>Coef (jornal + K)</label><input type="number" id="obra-coef" value="2.15" step="0.01" style="width:90px"></div>
+            <div class="campo"><label>K (ajuste $/m² adicional)</label><input type="number" id="obra-k" value="1" step="0.01" style="width:90px"></div>
+            <div class="campo"><label>Superficie de obra (m²)</label><input type="number" id="obra-superficie" value="300" min="0" style="width:100px"></div>
+            <div class="campo"><label>&nbsp;</label><button type="button" id="obra-calcular">Calcular</button></div>
+          </div>
+          <div class="estado" id="estado-obra"></div>
+          <div class="tabla-wrap">
+            <table class="tabla-resumen">
+              <thead><tr>
+                <th>Categoría</th><th>Cantidad</th><th>Jornal (básico)</th><th>Jornal + K</th>
+                <th>Subtotal neto</th><th>Subtotal + K</th>
+              </tr></thead>
+              <tbody id="obra-tbody">${filasCategoria}</tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="4"><strong>Total</strong></td>
+                  <td id="obra-total-neto"><strong>—</strong></td>
+                  <td id="obra-total-con"><strong>—</strong></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <div class="tabla-wrap">
+            <table class="tabla-resumen">
+              <tbody>
+                <tr><td>$/m² (neto)</td><td id="obra-m2-neto">—</td><td>$/m² (con K)</td><td id="obra-m2-con">—</td></tr>
+                <tr><td>Horas totales por m²</td><td id="obra-horas-m2">—</td><td></td><td></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 style="margin-top:24px">Redeterminación de mano de obra</h3>
+          <div class="controles">
+            <div class="campo"><label>Categoría</label>${crearSelect('obra-categoria', CATEGORIAS_UOCRA.map(([col, nombre]) => ({value: col, label: nombre})), 'label', 'value')}</div>
+            <div class="campo"><label>Fecha base</label><input type="date" id="obra-fecha-base"></div>
+            <div class="campo"><label>Fecha nueva</label><input type="date" id="obra-fecha-nueva"></div>
+            <div class="campo"><label>&nbsp;</label><button type="button" id="obra-redeterminar">Calcular Gap/TIR</button></div>
+          </div>
+          <div class="estado" id="estado-redeterminacion"></div>
+          <div class="tabla-wrap">
+            <table class="tabla-resumen">
+              <tbody>
+                <tr><td>Básico fecha base</td><td id="obra-basico-base">—</td><td>Básico fecha nueva</td><td id="obra-basico-nueva">—</td></tr>
+                <tr><td>Gap</td><td id="obra-gap">—</td><td>TIR anualizada</td><td id="obra-tir">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="controles">
+            <div class="campo"><label>Monto en fecha base</label><input type="number" id="obra-monto-base" placeholder="ej. 600000" style="width:140px"></div>
+            <div class="campo"><label>&nbsp;</label><span id="obra-monto-redeterminado" class="estado" style="margin:0">—</span></div>
+            <div class="campo"><label>Monto hoy</label><input type="number" id="obra-monto-hoy" placeholder="ej. 7082374" style="width:140px"></div>
+            <div class="campo"><label>&nbsp;</label><span id="obra-valor-base" class="estado" style="margin:0">—</span></div>
+          </div>
+
+          <h3 style="margin-top:24px">Comparación con Arquímedes</h3>
+          <div class="controles">
+            <div class="campo"><label>Precio de Arquímedes ($)</label><input type="number" id="obra-arquimedes" placeholder="ej. 44887166" style="width:140px"></div>
+            <div class="campo"><label>Precio del dólar</label><input type="number" id="obra-dolar" placeholder="ej. 1150" style="width:100px"></div>
+          </div>
+          <div class="tabla-wrap">
+            <table class="tabla-resumen">
+              <tbody>
+                <tr><td>Precio M² Arquímedes</td><td id="obra-m2-arq">—</td><td>Precio M² Arquímedes (con K)</td><td id="obra-m2-arq-k">—</td></tr>
+                <tr><td>Precio M² en USD</td><td id="obra-m2-usd">—</td><td></td><td></td></tr>
+              </tbody>
             </table>
           </div>
         </section>`;
@@ -516,6 +614,127 @@ async function pintarResumenAnualRem(contId, data) {
     </div>`;
 }
 
+// ── Cálculo de Obra: mano de obra por plazo + redeterminación ──────────────
+
+let uocraBasicosVigentes = {};
+let ultimoGapPct = null;
+
+async function cargarBasicosVigentesUocra() {
+  const r = await fetch(`${API}/api/series/uocra`);
+  const registros = await r.json();
+  const hoy = new Date().toISOString().slice(0, 10);
+  const vigentes = registros.filter(reg => reg.FECHA <= hoy).sort((a, b) => a.FECHA.localeCompare(b.FECHA));
+  const basicos = {};
+  if (!vigentes.length) return basicos;
+  const ultimo = vigentes[vigentes.length - 1];
+  CATEGORIAS_UOCRA.forEach(([col]) => { basicos[col] = Number(ultimo[col]) || 0; });
+  return basicos;
+}
+
+function calcularObra() {
+  const coef = Number(document.getElementById('obra-coef').value) || 0;
+  const k = Number(document.getElementById('obra-k').value) || 0;
+  const meses = Number(document.getElementById('obra-meses').value) || 0;
+  const dias = Number(document.getElementById('obra-dias').value) || 0;
+  const horas = Number(document.getElementById('obra-horas').value) || 0;
+  const superficie = Number(document.getElementById('obra-superficie').value) || 0;
+
+  let totalNeto = 0, totalCon = 0, cantidadTotal = 0;
+  document.querySelectorAll('.obra-cantidad').forEach(input => {
+    const col = input.dataset.col;
+    const cantidad = Number(input.value) || 0;
+    cantidadTotal += cantidad;
+    const basico = uocraBasicosVigentes[col] || 0;
+    const basicoK = basico * coef;
+    const subNeto = basico * cantidad * meses * dias * horas;
+    const subCon = basicoK * cantidad * meses * dias * horas;
+    totalNeto += subNeto;
+    totalCon += subCon;
+
+    const bEl = document.querySelector(`.obra-basico[data-col="${col}"]`);
+    const bkEl = document.querySelector(`.obra-basicok[data-col="${col}"]`);
+    const snEl = document.querySelector(`.obra-subneto[data-col="${col}"]`);
+    const scEl = document.querySelector(`.obra-subcon[data-col="${col}"]`);
+    if (bEl) bEl.textContent = fmtNum(basico, 0);
+    if (bkEl) bkEl.textContent = fmtNum(basicoK, 2);
+    if (snEl) snEl.textContent = fmtNum(subNeto, 0);
+    if (scEl) scEl.textContent = fmtNum(subCon, 0);
+  });
+
+  document.getElementById('obra-total-neto').innerHTML = `<strong>${fmtNum(totalNeto, 0)}</strong>`;
+  document.getElementById('obra-total-con').innerHTML = `<strong>${fmtNum(totalCon, 0)}</strong>`;
+
+  const ccM2Neto = superficie ? totalNeto / superficie : 0;
+  const ccM2Con = superficie ? totalCon / superficie : 0;
+  document.getElementById('obra-m2-neto').textContent = fmtNum(ccM2Neto, 2);
+  document.getElementById('obra-m2-con').textContent = fmtNum(ccM2Con * k, 2);
+  document.getElementById('obra-horas-m2').textContent = superficie
+    ? fmtNum((cantidadTotal * meses * dias * horas) / superficie, 4) : '—';
+
+  actualizarArquimedes();
+}
+
+async function calcularRedeterminacion() {
+  const estadoEl = document.getElementById('estado-redeterminacion');
+  const categoria = document.getElementById('obra-categoria').value;
+  const fechaBase = document.getElementById('obra-fecha-base').value;
+  const fechaNueva = document.getElementById('obra-fecha-nueva').value;
+  if (!fechaBase || !fechaNueva) {
+    estadoEl.textContent = 'Completá fecha base y fecha nueva.';
+    return;
+  }
+  estadoEl.textContent = 'Calculando…';
+  estadoEl.classList.remove('error');
+  try {
+    const r = await fetch(`${API}/api/variacion?familia=${encodeURIComponent('uocra:' + categoria)}&desde=${fechaBase}&hasta=${fechaNueva}`);
+    const data = await r.json();
+    if (!r.ok) {
+      estadoEl.textContent = data.error || 'No hay datos para ese rango.';
+      estadoEl.classList.add('error');
+      return;
+    }
+    document.getElementById('obra-basico-base').textContent = `${fmtNum(data.valor_desde, 0)} (${data.desde})`;
+    document.getElementById('obra-basico-nueva').textContent = `${fmtNum(data.valor_hasta, 0)} (${data.hasta})`;
+    document.getElementById('obra-gap').textContent = fmtPct(data.variacion_pct);
+    document.getElementById('obra-tir').textContent = data.tir_anualizada_pct !== null ? fmtPct(data.tir_anualizada_pct) : '—';
+    estadoEl.textContent = `Calculado sobre las fechas vigentes más cercanas (${data.dias} días entre ellas)`;
+    ultimoGapPct = data.variacion_pct;
+    actualizarMontosRedeterminados();
+  } catch (err) {
+    estadoEl.textContent = `No se pudo conectar con el servidor local (${API}).`;
+    estadoEl.classList.add('error');
+  }
+}
+
+function actualizarMontosRedeterminados() {
+  const montoBase = Number(document.getElementById('obra-monto-base').value);
+  const montoHoy = Number(document.getElementById('obra-monto-hoy').value);
+  const spanRede = document.getElementById('obra-monto-redeterminado');
+  const spanBase = document.getElementById('obra-valor-base');
+  if (ultimoGapPct === null) {
+    spanRede.textContent = 'Calculá el Gap primero';
+    spanBase.textContent = 'Calculá el Gap primero';
+    return;
+  }
+  const factor = 1 + ultimoGapPct / 100;
+  spanRede.textContent = montoBase ? `Redeterminado a hoy: ${fmtNum(montoBase * factor, 2)}` : '—';
+  spanBase.textContent = montoHoy ? `Valor a fecha base: ${fmtNum(montoHoy / factor, 2)}` : '—';
+}
+
+function actualizarArquimedes() {
+  const superficie = Number(document.getElementById('obra-superficie')?.value) || 0;
+  const k = Number(document.getElementById('obra-k')?.value) || 0;
+  const arq = Number(document.getElementById('obra-arquimedes')?.value) || 0;
+  const dolar = Number(document.getElementById('obra-dolar')?.value) || 0;
+  const m2Arq = superficie ? arq / superficie : 0;
+  const elArq = document.getElementById('obra-m2-arq');
+  const elArqK = document.getElementById('obra-m2-arq-k');
+  const elUsd = document.getElementById('obra-m2-usd');
+  if (elArq) elArq.textContent = arq ? fmtNum(m2Arq, 2) : '—';
+  if (elArqK) elArqK.textContent = arq ? fmtNum(m2Arq * k, 2) : '—';
+  if (elUsd) elUsd.textContent = (arq && dolar) ? fmtNum(m2Arq / dolar, 4) : '—';
+}
+
 async function cargarVentana(v) {
   const estadoEl = document.getElementById(`estado-${v.id}`);
   estadoEl.textContent = 'Cargando…';
@@ -529,6 +748,20 @@ async function cargarVentana(v) {
       resumenFilas = await r.json();
       pintarResumen(resumenFilas);
       estadoEl.textContent = 'Actualizado';
+    } catch (err) {
+      estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
+      estadoEl.classList.add('error');
+    }
+    return;
+  }
+
+  if (v.esObra) {
+    try {
+      uocraBasicosVigentes = await cargarBasicosVigentesUocra();
+      const fechaNuevaEl = document.getElementById('obra-fecha-nueva');
+      if (fechaNuevaEl && !fechaNuevaEl.value) fechaNuevaEl.value = new Date().toISOString().slice(0, 10);
+      calcularObra();
+      estadoEl.textContent = 'Básicos vigentes cargados. Completá cantidades/fechas y calculá.';
     } catch (err) {
       estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
       estadoEl.classList.add('error');
@@ -761,6 +994,17 @@ async function init() {
     sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-item-${v.id}` === sel.id)));
   });
   document.getElementById('resumen-calcular')?.addEventListener('click', calcularPersonalizado);
+
+  document.getElementById('obra-calcular')?.addEventListener('click', calcularObra);
+  document.getElementById('obra-redeterminar')?.addEventListener('click', calcularRedeterminacion);
+  document.getElementById('obra-monto-base')?.addEventListener('input', actualizarMontosRedeterminados);
+  document.getElementById('obra-monto-hoy')?.addEventListener('input', actualizarMontosRedeterminados);
+  document.getElementById('obra-arquimedes')?.addEventListener('input', actualizarArquimedes);
+  document.getElementById('obra-dolar')?.addEventListener('input', actualizarArquimedes);
+  document.getElementById('obra-k')?.addEventListener('input', calcularObra);
+  document.getElementById('obra-superficie')?.addEventListener('input', calcularObra);
+  document.getElementById('obra-coef')?.addEventListener('input', calcularObra);
+
   cargarVentana(VENTANAS[0]);
 }
 

@@ -39,7 +39,10 @@ def _en_o_antes(df: pd.DataFrame, fecha: pd.Timestamp):
 
 
 def variacion(records: list[dict], fecha_col: str, valor_col: str, desde: str, hasta: str) -> dict | None:
-    """% de variación entre el valor más cercano (hacia atrás) a `desde` y a `hasta`."""
+    """% de variación entre el valor más cercano (hacia atrás) a `desde` y a
+    `hasta`, más la tasa anualizada (equivalente al XIRR de Excel para un
+    flujo de 2 puntos: -valor_desde en `desde`, +valor_hasta en `hasta` —
+    mismo cálculo que la "redeterminación" del Excel de Juan: Gap + TIR)."""
     df = _to_df(records, fecha_col, valor_col)
     if df.empty:
         return None
@@ -51,12 +54,19 @@ def variacion(records: list[dict], fecha_col: str, valor_col: str, desde: str, h
 
     f_ini, v_ini = ini
     f_fin, v_fin = fin
+    dias = (f_fin - f_ini).days
+    tir = None
+    if dias > 0:
+        tir = round(((v_fin / v_ini) ** (365 / dias) - 1) * 100, 2)
+
     return {
         "desde": f_ini.date().isoformat(),
         "hasta": f_fin.date().isoformat(),
         "valor_desde": round(v_ini, 6),
         "valor_hasta": round(v_fin, 6),
+        "dias": dias,
         "variacion_pct": round((v_fin / v_ini - 1) * 100, 2),
+        "tir_anualizada_pct": tir,
     }
 
 

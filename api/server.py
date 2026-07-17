@@ -110,6 +110,11 @@ SERIES_MULTI_COLUMNA = {
                       "columnas": ["INDICE_GENERAL", "MATERIALES", "MANO_DE_OBRA", "PROVISIONES"]},
     "cac": {"tab": "CAC", "fecha_col": "FECHA",
             "columnas": ["COSTO_CONSTRUCCION", "MATERIALES", "MANO_DE_OBRA"]},
+    # "uocra:OFICIAL", "uocra:SERENO", etc. — para la calculadora de mano de
+    # obra / redeterminación, que necesita el básico de CUALQUIER categoría
+    # (no solo "Oficial", que es la única que vive en SERIES).
+    "uocra": {"tab": "UOCRA", "fecha_col": "FECHA",
+              "columnas": ["OFICIAL_ESPECIALIZADO", "OFICIAL", "MEDIO_OFICIAL", "AYUDANTE", "SERENO"]},
 }
 
 # Series que aparecen en la tabla Resumen (nombre visible -> familia resoluble
