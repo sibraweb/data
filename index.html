@@ -124,6 +124,18 @@ const CONSTRUCCION_SERIES = [
   { value: 'cac:COSTO_CONSTRUCCION', label: 'CAMARCO · Costo de construcción' },
   { value: 'cac:MATERIALES', label: 'CAMARCO · Materiales' },
   { value: 'cac:MANO_DE_OBRA', label: 'CAMARCO · Mano de obra' },
+  { value: 'icc_caba:GENERAL', label: 'ICC CABA · General' },
+  { value: 'icc_buenos_aires:GENERAL', label: 'ICC Buenos Aires · General' },
+  { value: 'icc_cordoba:GENERAL', label: 'ICC Córdoba · General' },
+  { value: 'icc_santa_fe:GENERAL', label: 'ICC Santa Fe · General' },
+];
+
+const SALARIOS_SERIES = [
+  { value: 'salarios:INDICE_TOTAL', label: 'Índice total' },
+  { value: 'salarios:PRIVADO_REGISTRADO', label: 'Sector privado registrado' },
+  { value: 'salarios:PUBLICO', label: 'Sector público' },
+  { value: 'salarios:TOTAL_REGISTRADO', label: 'Total registrado (privado + público)' },
+  { value: 'salarios:NO_REGISTRADO', label: 'Sector no registrado (estimado, EPH)' },
 ];
 
 const REM_SERIES = [
@@ -151,6 +163,7 @@ const VENTANAS = [
   { id: 'dolar', nombre: 'Dólar', familia: 'dolar', esDolar: true },
   { id: 'materiales', nombre: 'Materiales', esMateriales: true },
   { id: 'construccion', nombre: 'Construcción (APYMECO/CAMARCO)', familia: 'construccion', proyectable: true, esConstruccion: true },
+  { id: 'salarios', nombre: 'Salarios (INDEC)', familia: 'salarios:INDICE_TOTAL', esSalarios: true },
   { id: 'rem', nombre: 'Proyecciones (REM)', esRem: true },
   { id: 'obra', nombre: 'Cálculo de Obra', esObra: true },
 ];
@@ -318,6 +331,12 @@ function render() {
             <div class="campo">
               <label>Serie</label>
               ${crearSelect(`sel-construcciontipo-${v.id}`, CONSTRUCCION_SERIES, 'label', 'value')}
+            </div>
+          ` : ''}
+          ${v.esSalarios ? `
+            <div class="campo">
+              <label>Serie</label>
+              ${crearSelect(`sel-salariostipo-${v.id}`, SALARIOS_SERIES, 'label', 'value')}
             </div>
           ` : ''}
           ${v.esRem ? `
@@ -874,7 +893,9 @@ async function cargarVentana(v) {
     ? `dolar:${document.getElementById(`sel-dolartipo-${v.id}`).value}`
     : v.esConstruccion
       ? document.getElementById(`sel-construcciontipo-${v.id}`).value
-      : v.familia;
+      : v.esSalarios
+        ? document.getElementById(`sel-salariostipo-${v.id}`).value
+        : v.familia;
 
   if (!familia) {
     estadoEl.textContent = 'Sin datos disponibles todavía.';
@@ -885,7 +906,9 @@ async function cargarVentana(v) {
     ? (INDICES_AJUSTE.find(o => o.value === document.getElementById(`sel-dolartipo-${v.id}`).value)?.label.replace('÷ ', '') || 'Dólar')
     : v.esConstruccion
       ? (CONSTRUCCION_SERIES.find(o => o.value === familia)?.label || v.nombre)
-      : (v.nombreSerie || v.nombre);
+      : v.esSalarios
+        ? (SALARIOS_SERIES.find(o => o.value === familia)?.label || v.nombre)
+        : (v.nombreSerie || v.nombre);
 
   try {
     const r = await fetch(`${API}/api/ajustar?familia=${encodeURIComponent(familia)}&indice=${ajuste}`);
@@ -986,6 +1009,9 @@ async function init() {
   });
   document.querySelectorAll('select[id^="sel-construcciontipo-"]').forEach(sel => {
     sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-construcciontipo-${v.id}` === sel.id)));
+  });
+  document.querySelectorAll('select[id^="sel-salariostipo-"]').forEach(sel => {
+    sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-salariostipo-${v.id}` === sel.id)));
   });
   document.querySelectorAll('select[id^="sel-rem-"]').forEach(sel => {
     sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-rem-${v.id}` === sel.id)));

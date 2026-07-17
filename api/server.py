@@ -47,7 +47,7 @@ from proyeccion import estimar_modelo, proyectar
 from rem_estimaciones import construir_curva_mensual, resumen_por_anio
 from resumen import resumen_serie
 from resumen import variacion as calcular_variacion
-from scrapers import argentinadatos, bcra, bcra_rem, camarco, dolares, investing, ripte, tim, uocra
+from scrapers import argentinadatos, bcra, bcra_rem, camarco, dolares, icc, investing, ripte, salarios, tim, uocra
 
 load_dotenv()
 
@@ -75,6 +75,11 @@ SERIES = {
     "uocra": {"tab": "UOCRA", "fecha_col": "FECHA", "valor_col": "OFICIAL"},
     "construccion": {"tab": "CONSTRUCCION", "fecha_col": "FECHA", "valor_col": "INDICE_GENERAL"},
     "cac": {"tab": "CAC", "fecha_col": "FECHA", "valor_col": "COSTO_CONSTRUCCION"},
+    "salarios": {"tab": "SALARIOS", "fecha_col": "FECHA", "valor_col": "INDICE_TOTAL"},
+    "icc_caba": {"tab": "ICC_CABA", "fecha_col": "FECHA", "valor_col": "GENERAL"},
+    "icc_buenos_aires": {"tab": "ICC_BUENOS_AIRES", "fecha_col": "FECHA", "valor_col": "GENERAL"},
+    "icc_cordoba": {"tab": "ICC_CORDOBA", "fecha_col": "FECHA", "valor_col": "GENERAL"},
+    "icc_santa_fe": {"tab": "ICC_SANTA_FE", "fecha_col": "FECHA", "valor_col": "GENERAL"},
 }
 
 # Series BCRA simples ("fecha"/"valor") que se vuelcan 1:1 a su propia hoja,
@@ -115,6 +120,16 @@ SERIES_MULTI_COLUMNA = {
     # (no solo "Oficial", que es la única que vive en SERIES).
     "uocra": {"tab": "UOCRA", "fecha_col": "FECHA",
               "columnas": ["OFICIAL_ESPECIALIZADO", "OFICIAL", "MEDIO_OFICIAL", "AYUDANTE", "SERENO"]},
+    "salarios": {"tab": "SALARIOS", "fecha_col": "FECHA",
+                 "columnas": ["PRIVADO_REGISTRADO", "PUBLICO", "TOTAL_REGISTRADO", "NO_REGISTRADO", "INDICE_TOTAL"]},
+    "icc_caba": {"tab": "ICC_CABA", "fecha_col": "FECHA",
+                 "columnas": ["GENERAL", "MATERIALES", "MANO_DE_OBRA", "GASTOS"]},
+    "icc_buenos_aires": {"tab": "ICC_BUENOS_AIRES", "fecha_col": "FECHA",
+                          "columnas": ["GENERAL", "MATERIALES", "MANO_DE_OBRA", "GASTOS"]},
+    "icc_cordoba": {"tab": "ICC_CORDOBA", "fecha_col": "FECHA",
+                    "columnas": ["GENERAL", "MATERIALES", "MANO_DE_OBRA", "GASTOS"]},
+    "icc_santa_fe": {"tab": "ICC_SANTA_FE", "fecha_col": "FECHA",
+                     "columnas": ["GENERAL", "MATERIALES", "MANO_DE_OBRA", "GASTOS"]},
 }
 
 # Series que aparecen en la tabla Resumen (nombre visible -> familia resoluble
@@ -133,6 +148,8 @@ RESUMEN_SERIES = [
     ("CAMARCO materiales", "cac:MATERIALES"),
     ("CAMARCO mano de obra", "cac:MANO_DE_OBRA"),
     ("Construcción general (APYMECO)", "construccion:INDICE_GENERAL"),
+    ("Índice de Salarios INDEC", "salarios:INDICE_TOTAL"),
+    ("ICC Buenos Aires (costo construcción)", "icc_buenos_aires:GENERAL"),
     ("Riesgo país", "riesgo_pais"),
     ("MERVAL", "merval"),
 ]
@@ -551,6 +568,23 @@ def refrescar_cac():
     print(f"[scheduler] CAC +{n} filas (CAMARCO/cifrasonline no siempre tiene el último mes)")
 
 
+def refrescar_salarios():
+    sid = _sheet_id()
+    serie = salarios.fetch_salarios()
+    headers = ["FECHA", "PRIVADO_REGISTRADO", "PUBLICO", "TOTAL_REGISTRADO", "NO_REGISTRADO", "INDICE_TOTAL"]
+    n = sheets.upsert_series(sid, "SALARIOS", headers, "FECHA", serie)
+    print(f"[scheduler] SALARIOS +{n} filas")
+
+
+def refrescar_icc():
+    sid = _sheet_id()
+    datos = icc.fetch_icc()
+    headers = ["FECHA", "GENERAL", "MATERIALES", "MANO_DE_OBRA", "GASTOS"]
+    for clave, serie in datos.items():
+        n = sheets.upsert_series(sid, f"ICC_{clave}", headers, "FECHA", serie)
+        print(f"[scheduler] ICC_{clave} +{n} filas")
+
+
 def refrescar_uocra():
     sid = _sheet_id()
     headers = [
@@ -615,6 +649,8 @@ FUENTES_MANUALES = {
     "merval": refrescar_merval,
     "cac": refrescar_cac,
     "uocra": refrescar_uocra,
+    "salarios": refrescar_salarios,
+    "icc": refrescar_icc,
 }
 
 
@@ -651,7 +687,13 @@ def iniciar_scheduler():
     sched.add_job(refrescar_ripte, "interval", days=7)
     sched.add_job(refrescar_rem, "interval", days=7)
     sched.add_job(refrescar_uocra, "interval", days=7)
-    sched.add_job(refrescar_cac, "interval", days=7)
+    sched.add_job(refrescar_salarios, "interval", days=7)
+    sched.add_job(refrescar_icc, "interval", days=7)
+
+    # CAMARCO publica su dato del mes recién después del día 25 — antes de
+    # eso pedirlo no trae nada nuevo. Se chequea dos veces por si el día 25
+    # cae en fin de semana/feriado y el dato sale un poco más tarde.
+    sched.add_job(refrescar_cac, "cron", day="26,28", hour=9)
 
     sched.start()
     return sched
