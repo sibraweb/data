@@ -22,11 +22,20 @@ SCOPES = [
 
 SHEET_NAME = "SIBRATECH_INDICES"
 
+# Sheet SEPARADA de la interna (SIBRATECH_INDICES) — esta se comparte
+# "Cualquiera con el link: Lector" y solo recibe valores planos ya
+# calculados (nunca fórmulas ni datos crudos), para que la página pública
+# (sibratech.com.ar) la lea directo sin exponer el backend interno ni las
+# hojas de trabajo. Mismo patrón de seguridad ya usado en Obra (ver memoria
+# project_cotizaciones_publicas_pagina).
+PUBLIC_SHEET_NAME = "SIBRATECH_PUBLICO"
+
 BASE_DIR = Path(__file__).parent
 TOKEN_FILE = BASE_DIR / "token.pickle"
 CREDS_FILE = BASE_DIR / "credentials.json"
 
 INDICES_SHEET_ID = os.environ.get("INDICES_SHEET_ID", "")
+PUBLIC_SHEET_ID = os.environ.get("PUBLIC_SHEET_ID", "")
 OBRA_PRECIOS_SHEET_ID = os.environ.get(
     "OBRA_PRECIOS_SHEET_ID", "1qm3pZ546OGUWT-xiBzZHv_dM5aVvw-rjC3wmSWR7_84"
 )
@@ -103,6 +112,45 @@ def ensure_indices_sheet() -> str:
     print(f"[sheets] Creada {SHEET_NAME}: https://docs.google.com/spreadsheets/d/{INDICES_SHEET_ID}")
     print(f"[sheets] Guardá INDICES_SHEET_ID={INDICES_SHEET_ID} en .env")
     return INDICES_SHEET_ID
+
+
+def ensure_public_sheet() -> str:
+    """Busca la Sheet pública 'SIBRATECH_PUBLICO'; la crea si no existe y le
+    confirma el permiso "cualquiera con el link: lector" (idempotente — no
+    duplica el permiso si ya está). Devuelve el ID — guardalo en .env como
+    PUBLIC_SHEET_ID para no tener que buscarla/re-compartirla en cada arranque."""
+    global PUBLIC_SHEET_ID
+    creds = get_credentials()
+    drive_svc = build("drive", "v3", credentials=creds)
+
+    if not PUBLIC_SHEET_ID:
+        resp = drive_svc.files().list(
+            q=f"name='{PUBLIC_SHEET_NAME}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
+            fields="files(id,name)",
+            pageSize=5,
+        ).execute()
+        files = resp.get("files", [])
+        if files:
+            PUBLIC_SHEET_ID = files[0]["id"]
+        else:
+            meta = {"name": PUBLIC_SHEET_NAME, "mimeType": "application/vnd.google-apps.spreadsheet"}
+            file = drive_svc.files().create(body=meta, fields="id").execute()
+            PUBLIC_SHEET_ID = file["id"]
+            print(f"[sheets] Creada {PUBLIC_SHEET_NAME}: https://docs.google.com/spreadsheets/d/{PUBLIC_SHEET_ID}")
+            print(f"[sheets] Guardá PUBLIC_SHEET_ID={PUBLIC_SHEET_ID} en .env")
+
+    try:
+        permisos = drive_svc.permissions().list(fileId=PUBLIC_SHEET_ID, fields="permissions(type,role)").execute()
+        ya_publico = any(p.get("type") == "anyone" for p in permisos.get("permissions", []))
+        if not ya_publico:
+            drive_svc.permissions().create(
+                fileId=PUBLIC_SHEET_ID, body={"type": "anyone", "role": "reader"}, fields="id"
+            ).execute()
+            print(f"[sheets] {PUBLIC_SHEET_NAME} compartida como pública (lector)")
+    except Exception as exc:
+        print(f"[sheets] No se pudo confirmar el permiso público de {PUBLIC_SHEET_NAME}: {exc}")
+
+    return PUBLIC_SHEET_ID
 
 
 def get_or_create_ws(gc: gspread.Client, sheet_id: str, title: str, headers: list[str]):

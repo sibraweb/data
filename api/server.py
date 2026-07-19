@@ -30,6 +30,7 @@ dependen de un único dato mensual, ver notas de cada grupo):
 
 from __future__ import annotations
 
+import datetime as dt
 import os
 import sys
 from pathlib import Path
@@ -518,6 +519,37 @@ def get_resumen():
     return jsonify(filas)
 
 
+# ── Publicación diaria a la Sheet pública (SIBRATECH_PUBLICO) ───────────────
+# Foto de la pantalla Resumen, un snapshot por día — pensado para alimentar
+# después la página sibratech.com.ar (con el Design System propio). Mismo
+# mecanismo (tab "CLAVE"=FECHA|FAMILIA en la Sheet pública, solo valores
+# planos) queda listo para sumar más adelante otra tab con la cotización de
+# las obras tipo (ej. la casa) cuando esa base exista — no se publica nada
+# de eso todavía, solo el Resumen.
+PUBLICO_RESUMEN_HEADERS = [
+    "CLAVE", "FECHA_PUBLICACION", "FAMILIA", "NOMBRE",
+    "ultimo_valor", "ultima_fecha", "mom", "d30", "ytd", "yoy", "yoy_anualizada", "a5",
+]
+
+
+def publicar_resumen():
+    sid_publico = sheets.ensure_public_sheet()
+    hoy = dt.date.today().isoformat()
+
+    filas = []
+    for nombre, familia in RESUMEN_SERIES:
+        records, fecha_col, valor_col = _resolver_familia(familia)
+        r = resumen_serie(records or [], fecha_col or "FECHA", valor_col or "VALOR")
+        if not r:
+            continue
+        fila = {"FECHA_PUBLICACION": hoy, "FAMILIA": familia, "NOMBRE": nombre, **r}
+        fila["CLAVE"] = f"{hoy}|{familia}"
+        filas.append(fila)
+
+    n = sheets.upsert_series(sid_publico, "RESUMEN", PUBLICO_RESUMEN_HEADERS, "CLAVE", filas)
+    print(f"[scheduler] RESUMEN público +{n} filas -> https://docs.google.com/spreadsheets/d/{sid_publico}")
+
+
 @app.route("/api/variacion")
 def get_variacion():
     familia = request.args.get("familia")
@@ -676,6 +708,7 @@ FUENTES_MANUALES = {
     "salarios": refrescar_salarios,
     "icc": refrescar_icc,
     "alquileres": refrescar_alquileres,
+    "publicar_resumen": publicar_resumen,
 }
 
 
@@ -719,6 +752,10 @@ def iniciar_scheduler():
     # eso pedirlo no trae nada nuevo. Se chequea dos veces por si el día 25
     # cae en fin de semana/feriado y el dato sale un poco más tarde.
     sched.add_job(refrescar_cac, "cron", day="26,28", hour=9)
+
+    # Diario — foto de la pantalla Resumen a la Sheet pública (después de que
+    # ya corrieron los refrescos del día, para llevarse el dato más nuevo).
+    sched.add_job(publicar_resumen, "cron", hour=21)
 
     sched.start()
     return sched
