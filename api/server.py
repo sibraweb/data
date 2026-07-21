@@ -553,14 +553,27 @@ def publicar_resumen():
 @app.route("/api/variacion")
 def get_variacion():
     familia = request.args.get("familia")
+    indice = request.args.get("indice")  # opcional: mismo "ajuste" que ya está graficado (ej. "ipc", "cer")
+    item = request.args.get("item")
     desde = request.args.get("desde")
     hasta = request.args.get("hasta")
     if not (familia and desde and hasta):
         return jsonify({"error": "faltan parámetros: familia, desde, hasta (YYYY-MM-DD)"}), 400
 
-    records, fecha_col, valor_col = _resolver_familia(familia)
+    records, fecha_col, valor_col = _resolver_familia(familia, item)
     if records is None:
         return jsonify({"error": f"familia desconocida: {familia}"}), 404
+
+    if indice and indice != "ninguno":
+        idx_records, idx_fecha, idx_valor = _serie_indice(indice)
+        if idx_records is None:
+            return jsonify({"error": f"índice desconocido: {indice}"}), 404
+        # La calculadora tiene que operar sobre la MISMA serie que está
+        # graficada (ej. "cemento ÷ IPC"), no sobre el precio nominal del
+        # cemento — se arma primero el ratio (igual que /api/ajustar) y
+        # recién ahí se busca el valor "asof" en cada fecha pedida.
+        records = ajustar(records, idx_records, fecha_col, valor_col, idx_fecha, idx_valor, modo="ratio")
+        fecha_col, valor_col = "fecha", "valor"
 
     r = calcular_variacion(records, fecha_col, valor_col, desde, hasta)
     if r is None:

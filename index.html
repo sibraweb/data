@@ -238,16 +238,52 @@ function render() {
           <td class="obra-subcon" data-col="${col}">—</td>
         </tr>`).join('');
 
+      const filasApu = CATEGORIAS_UOCRA.map(([col, nombre]) => `
+        <tr>
+          <td>${nombre}</td>
+          <td><input type="number" class="apu-cantidad" data-col="${col}" value="0" min="0" style="width:70px"></td>
+          <td class="apu-horasm2" data-col="${col}">—</td>
+          <td class="apu-neto" data-col="${col}">—</td>
+          <td class="apu-con" data-col="${col}">—</td>
+        </tr>`).join('');
+
+      const filasHorasM2 = [35, 40, 45].map(h => `
+        <tr>
+          <td><input type="number" class="horasm2-horas" value="${h}" min="0" style="width:80px"></td>
+          <td class="horasm2-neto">—</td>
+          <td class="horasm2-con">—</td>
+          <td class="horasm2-conk">—</td>
+          <td class="horasm2-conkcon">—</td>
+        </tr>`).join('');
+
       return `
         <section class="ventana${i === 0 ? ' active' : ''}" id="ventana-${v.id}">
-          <h3>Cálculo rápido de mano de obra por plazo</h3>
+          <h3>Cálculo de Superficie</h3>
+          <div class="tabla-wrap">
+            <table class="tabla-resumen">
+              <thead><tr><th>Ambiente</th><th>m² real</th><th>%</th><th>m² efectivo</th><th></th></tr></thead>
+              <tbody id="obra-superficie-tbody"></tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="3"><strong>Total (superficie de obra)</strong></td>
+                  <td id="obra-superficie-total"><strong>—</strong></td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <div class="controles">
+            <div class="campo"><label>&nbsp;</label><button type="button" id="obra-superficie-agregar">+ Agregar ambiente</button></div>
+          </div>
+
+          <h3 style="margin-top:24px">Cálculo rápido de mano de obra por plazo</h3>
           <div class="controles">
             <div class="campo"><label>Meses</label><input type="number" id="obra-meses" value="1" min="0" style="width:90px"></div>
             <div class="campo"><label>Días por mes</label><input type="number" id="obra-dias" value="5" min="0" style="width:90px"></div>
             <div class="campo"><label>Horas por día</label><input type="number" id="obra-horas" value="8" min="0" style="width:90px"></div>
             <div class="campo"><label>Coef (jornal + K)</label><input type="number" id="obra-coef" value="2.15" step="0.01" style="width:90px"></div>
             <div class="campo"><label>K (ajuste $/m² adicional)</label><input type="number" id="obra-k" value="1" step="0.01" style="width:90px"></div>
-            <div class="campo"><label>Superficie de obra (m²)</label><input type="number" id="obra-superficie" value="300" min="0" style="width:100px"></div>
+            <div class="campo"><label>Superficie de obra (m²)</label><input type="number" id="obra-superficie" value="300" min="0" style="width:100px" readonly title="Calculada desde la tabla de Cálculo de Superficie, arriba"></div>
             <div class="campo"><label>&nbsp;</label><button type="button" id="obra-calcular">Calcular</button></div>
           </div>
           <div class="estado" id="estado-obra"></div>
@@ -272,6 +308,7 @@ function render() {
               <tbody>
                 <tr><td>$/m² (neto)</td><td id="obra-m2-neto">—</td><td>$/m² (con K)</td><td id="obra-m2-con">—</td></tr>
                 <tr><td>Horas totales por m²</td><td id="obra-horas-m2">—</td><td></td><td></td></tr>
+                <tr><td>Variación interanual (Oficial)</td><td id="obra-oficial-yoy">—</td><td>Acumulado del año (Oficial)</td><td id="obra-oficial-ytd">—</td></tr>
               </tbody>
             </table>
           </div>
@@ -310,6 +347,40 @@ function render() {
                 <tr><td>Precio M² Arquímedes</td><td id="obra-m2-arq">—</td><td>Precio M² Arquímedes (con K)</td><td id="obra-m2-arq-k">—</td></tr>
                 <tr><td>Precio M² en USD</td><td id="obra-m2-usd">—</td><td></td><td></td></tr>
               </tbody>
+            </table>
+          </div>
+
+          <h3 style="margin-top:24px">Cálculo de Mano de Obra para un Ítem (APU)</h3>
+          <p class="estado" style="margin-top:0">Armá la cuadrilla del ítem (cantidad de cada categoría) y el rendimiento diario del conjunto — calcula las horas-hombre y el costo por m² (usa el mismo Coef de arriba para "con aportes").</p>
+          <div class="controles">
+            <div class="campo"><label>Horas por día</label><input type="number" id="apu-horas" value="8" min="0" style="width:90px"></div>
+            <div class="campo"><label>Rendimiento diario (m²/día)</label><input type="number" id="apu-rendimiento" value="7" min="0" step="0.01" style="width:120px"></div>
+          </div>
+          <div class="tabla-wrap">
+            <table class="tabla-resumen">
+              <thead><tr>
+                <th>Categoría</th><th>Cantidad en la cuadrilla</th><th>Horas/m²</th><th>Costo neto/m²</th><th>Costo con aportes/m²</th>
+              </tr></thead>
+              <tbody id="apu-tbody">${filasApu}</tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="2"><strong>Sumatoria</strong></td>
+                  <td id="apu-total-horas"><strong>—</strong></td>
+                  <td id="apu-total-neto"><strong>—</strong></td>
+                  <td id="apu-total-con"><strong>—</strong></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <h3 style="margin-top:24px">Estimado de mano de obra por superficie (horas de Oficial por m²)</h3>
+          <p class="estado" style="margin-top:0">Regla rápida sin armar cuadrilla: cuántas horas de Oficial estimás por m² (rendimientos de referencia habituales: 35/40/45).</p>
+          <div class="tabla-wrap">
+            <table class="tabla-resumen">
+              <thead><tr>
+                <th>Horas de Oficial por m²</th><th>Neto/m²</th><th>Con aportes/m²</th><th>Con K (neto)</th><th>Con K (con aportes)</th>
+              </tr></thead>
+              <tbody id="horasm2-tbody">${filasHorasM2}</tbody>
             </table>
           </div>
         </section>`;
@@ -381,6 +452,25 @@ function render() {
         <div class="chart-box"><canvas id="chart-${v.id}"></canvas></div>
         ${v.esRem ? `<div id="rem-extra-${v.id}"></div>` : ''}
         ${v.esUocra ? `<div id="uocra-vigentes"></div>` : ''}
+        ${!v.esRem ? `
+          <h3 style="margin-top:20px">Calcular entre dos fechas</h3>
+          <p class="estado" style="margin-top:0">Calcula sobre la MISMA serie que está graficada arriba (con el ajuste elegido). Si la serie es mensual y la fecha pedida cae en medio de un mes, se usa el último dato publicado en o antes de esa fecha (ej. IPC del 3 de abril = el dato de fin de marzo).</p>
+          <div class="controles">
+            <div class="campo"><label>Desde</label><input type="date" id="calc-desde-${v.id}"></div>
+            <div class="campo"><label>Hasta</label><input type="date" id="calc-hasta-${v.id}"></div>
+            <div class="campo"><label>&nbsp;</label><button type="button" id="calc-calcular-${v.id}">Calcular variación</button></div>
+          </div>
+          <div class="estado" id="calc-estado-${v.id}"></div>
+          <div class="tabla-wrap">
+            <table class="tabla-resumen">
+              <tbody>
+                <tr><td>Fecha usada (desde)</td><td id="calc-fecha-desde-${v.id}">—</td><td>Valor</td><td id="calc-valor-desde-${v.id}">—</td></tr>
+                <tr><td>Fecha usada (hasta)</td><td id="calc-fecha-hasta-${v.id}">—</td><td>Valor</td><td id="calc-valor-hasta-${v.id}">—</td></tr>
+                <tr><td>Variación</td><td id="calc-variacion-${v.id}">—</td><td>TIR anualizada</td><td id="calc-tir-${v.id}">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+        ` : ''}
       </section>`;
   }).join('');
 
@@ -668,6 +758,124 @@ async function cargarBasicosVigentesUocra() {
   return basicos;
 }
 
+// "Cálculo de Superficie" — lista de ambientes ponderados (Planta Baja
+// 100%, Planta Alta 50%, etc., igual que Z29:AC39 del Excel de Juan) que
+// suman para dar el m² total de la obra, usado en el bloque de arriba.
+function filaSuperficie(nombre, m2, pct) {
+  const fila = document.createElement('tr');
+  fila.innerHTML = `
+    <td><input type="text" class="obra-sup-nombre" value="${nombre}" style="width:140px"></td>
+    <td><input type="number" class="obra-sup-m2" value="${m2}" min="0" step="0.01" style="width:90px"></td>
+    <td><input type="number" class="obra-sup-pct" value="${pct}" min="0" max="100" step="1" style="width:70px"></td>
+    <td class="obra-sup-efectivo">—</td>
+    <td><button type="button" class="obra-sup-quitar" title="Quitar ambiente">✕</button></td>
+  `;
+  fila.querySelectorAll('input').forEach(inp => inp.addEventListener('input', recalcularSuperficie));
+  fila.querySelector('.obra-sup-quitar').addEventListener('click', () => { fila.remove(); recalcularSuperficie(); });
+  return fila;
+}
+
+function renderFilasSuperficie() {
+  const tbody = document.getElementById('obra-superficie-tbody');
+  if (!tbody || tbody.children.length) return;
+  tbody.appendChild(filaSuperficie('Planta Baja', 200, 100));
+  tbody.appendChild(filaSuperficie('Planta Alta', 200, 50));
+  recalcularSuperficie();
+}
+
+function recalcularSuperficie() {
+  const tbody = document.getElementById('obra-superficie-tbody');
+  let total = 0;
+  tbody.querySelectorAll('tr').forEach(fila => {
+    const m2 = Number(fila.querySelector('.obra-sup-m2').value) || 0;
+    const pct = Number(fila.querySelector('.obra-sup-pct').value) || 0;
+    const efectivo = m2 * (pct / 100);
+    fila.querySelector('.obra-sup-efectivo').textContent = fmtNum(efectivo, 2);
+    total += efectivo;
+  });
+  document.getElementById('obra-superficie-total').textContent = fmtNum(total, 2);
+  const supEl = document.getElementById('obra-superficie');
+  if (supEl) supEl.value = total.toFixed(2);
+  calcularObra();
+}
+
+// Variación interanual/acumulado del año del básico de Oficial (S12:T13
+// del Excel) — reusa /api/resumen en vez de duplicar el cálculo.
+async function cargarInteranualOficial() {
+  const elYoy = document.getElementById('obra-oficial-yoy');
+  const elYtd = document.getElementById('obra-oficial-ytd');
+  if (!elYoy || !elYtd) return;
+  try {
+    const r = await fetch(`${API}/api/resumen`);
+    const filas = await r.json();
+    const fila = filas.find(f => f.familia === 'uocra');
+    elYoy.textContent = fila && fila.yoy != null ? `${fila.yoy > 0 ? '+' : ''}${fila.yoy}%` : '—';
+    elYtd.textContent = fila && fila.ytd != null ? `${fila.ytd > 0 ? '+' : ''}${fila.ytd}%` : '—';
+  } catch (err) {
+    elYoy.textContent = '—';
+    elYtd.textContent = '—';
+  }
+}
+
+// "Cálculo de Mano de Obra para un Ítem" (APU) — Z63:AD74 del Excel:
+// dado el rendimiento diario del CONJUNTO de la cuadrilla (m²/día) y cuántos
+// de cada categoría la componen, calcula horas-hombre y costo por m².
+// Reusa uocraBasicosVigentes (ya cargado para el bloque de arriba) y el
+// mismo Coef ("con aportes" = básico × Coef, igual criterio que Jornal+K).
+function calcularApu() {
+  const horas = Number(document.getElementById('apu-horas')?.value) || 0;
+  const rendimiento = Number(document.getElementById('apu-rendimiento')?.value) || 0;
+  const coef = Number(document.getElementById('obra-coef')?.value) || 0;
+
+  let totalHoras = 0, totalNeto = 0, totalCon = 0;
+  document.querySelectorAll('.apu-cantidad').forEach(input => {
+    const col = input.dataset.col;
+    const cantidad = Number(input.value) || 0;
+    const basico = uocraBasicosVigentes[col] || 0;
+    const basicoCon = basico * coef;
+    const horasM2 = rendimiento ? (cantidad * horas) / rendimiento : 0;
+    const costoNeto = horasM2 * basico;
+    const costoCon = horasM2 * basicoCon;
+    totalHoras += horasM2;
+    totalNeto += costoNeto;
+    totalCon += costoCon;
+
+    const hEl = document.querySelector(`.apu-horasm2[data-col="${col}"]`);
+    const nEl = document.querySelector(`.apu-neto[data-col="${col}"]`);
+    const cEl = document.querySelector(`.apu-con[data-col="${col}"]`);
+    if (hEl) hEl.textContent = fmtNum(horasM2, 4);
+    if (nEl) nEl.textContent = fmtNum(costoNeto, 2);
+    if (cEl) cEl.textContent = fmtNum(costoCon, 2);
+  });
+
+  const elTh = document.getElementById('apu-total-horas');
+  const elTn = document.getElementById('apu-total-neto');
+  const elTc = document.getElementById('apu-total-con');
+  if (elTh) elTh.innerHTML = `<strong>${fmtNum(totalHoras, 4)}</strong>`;
+  if (elTn) elTn.innerHTML = `<strong>${fmtNum(totalNeto, 2)}</strong>`;
+  if (elTc) elTc.innerHTML = `<strong>${fmtNum(totalCon, 2)}</strong>`;
+}
+
+// "Estimado de mano de obra por superficie" (Z76:AF82 del Excel) — tablita
+// de referencia sin cuadrilla: horas de Oficial por m² (35/40/45 editables)
+// × básico de Oficial (Neto y con Coef), con y sin el K de arriba.
+function calcularHorasM2() {
+  const basicoOficial = uocraBasicosVigentes['OFICIAL'] || 0;
+  const coef = Number(document.getElementById('obra-coef')?.value) || 0;
+  const k = Number(document.getElementById('obra-k')?.value) || 0;
+  const basicoOficialCon = basicoOficial * coef;
+
+  document.querySelectorAll('#horasm2-tbody tr').forEach(fila => {
+    const horas = Number(fila.querySelector('.horasm2-horas').value) || 0;
+    const neto = horas * basicoOficial;
+    const con = horas * basicoOficialCon;
+    fila.querySelector('.horasm2-neto').textContent = fmtNum(neto, 2);
+    fila.querySelector('.horasm2-con').textContent = fmtNum(con, 2);
+    fila.querySelector('.horasm2-conk').textContent = fmtNum(neto * k, 2);
+    fila.querySelector('.horasm2-conkcon').textContent = fmtNum(con * k, 2);
+  });
+}
+
 function calcularObra() {
   const coef = Number(document.getElementById('obra-coef').value) || 0;
   const k = Number(document.getElementById('obra-k').value) || 0;
@@ -772,6 +980,68 @@ function actualizarArquimedes() {
   if (elUsd) elUsd.textContent = (arq && dolar) ? fmtNum(m2Arq / dolar, 4) : '—';
 }
 
+// Re-deriva familia/ajuste/item de los selectores ya presentes en la
+// ventana (misma lógica que arma el gráfico) — para que la calculadora
+// de "entre dos fechas" opere sobre EXACTAMENTE la serie que está mostrada.
+function datosVentanaActual(v) {
+  const ajuste = document.getElementById(`sel-ajuste-${v.id}`)?.value || 'ninguno';
+  let familia = v.esDolar
+    ? `dolar:${document.getElementById(`sel-dolartipo-${v.id}`).value}`
+    : v.esConstruccion
+      ? document.getElementById(`sel-construcciontipo-${v.id}`).value
+      : v.esSalarios
+        ? document.getElementById(`sel-salariostipo-${v.id}`).value
+        : v.esAlquiler
+          ? document.getElementById(`sel-alquilertipo-${v.id}`).value
+          : v.familia;
+  let item = null;
+  if (v.esMateriales) {
+    const selProv = document.getElementById(`sel-prov-${v.id}`);
+    const selItem = document.getElementById(`sel-item-${v.id}`);
+    const seleccionados = selItem ? Array.from(selItem.selectedOptions).map(o => o.value) : [];
+    familia = 'mat:' + (selProv ? selProv.value : '');
+    item = seleccionados[0] || null;
+  }
+  return { familia, ajuste, item };
+}
+
+async function calcularVariacionVentana(v) {
+  const estadoEl = document.getElementById(`calc-estado-${v.id}`);
+  const { familia, ajuste, item } = datosVentanaActual(v);
+  const desde = document.getElementById(`calc-desde-${v.id}`).value;
+  const hasta = document.getElementById(`calc-hasta-${v.id}`).value;
+  const celdas = ['calc-fecha-desde', 'calc-fecha-hasta', 'calc-valor-desde', 'calc-valor-hasta', 'calc-variacion', 'calc-tir']
+    .map(id => document.getElementById(`${id}-${v.id}`));
+
+  if (!familia || !desde || !hasta) {
+    estadoEl.textContent = 'Elegí ambas fechas (y, si es Materiales, un material de la lista).';
+    return;
+  }
+
+  estadoEl.textContent = 'Calculando…';
+  try {
+    let url = `${API}/api/variacion?familia=${encodeURIComponent(familia)}&indice=${encodeURIComponent(ajuste)}&desde=${desde}&hasta=${hasta}`;
+    if (item) url += `&item=${encodeURIComponent(item)}`;
+    const r = await fetch(url);
+    const data = await r.json();
+    if (!r.ok) {
+      estadoEl.textContent = data.error || 'Sin datos suficientes en ese rango.';
+      celdas.forEach(c => c.textContent = '—');
+      return;
+    }
+    const [cFechaDesde, cFechaHasta, cValorDesde, cValorHasta, cVariacion, cTir] = celdas;
+    cFechaDesde.textContent = data.desde;
+    cFechaHasta.textContent = data.hasta;
+    cValorDesde.textContent = data.valor_desde;
+    cValorHasta.textContent = data.valor_hasta;
+    cVariacion.textContent = `${data.variacion_pct > 0 ? '+' : ''}${data.variacion_pct}%`;
+    cTir.textContent = data.tir_anualizada_pct != null ? `${data.tir_anualizada_pct > 0 ? '+' : ''}${data.tir_anualizada_pct}%` : '—';
+    estadoEl.textContent = `${data.dias} días entre las fechas usadas (último dato disponible en o antes de cada fecha pedida).`;
+  } catch (err) {
+    estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
+  }
+}
+
 async function cargarVentana(v) {
   const estadoEl = document.getElementById(`estado-${v.id}`);
   estadoEl.textContent = 'Cargando…';
@@ -794,10 +1064,14 @@ async function cargarVentana(v) {
 
   if (v.esObra) {
     try {
+      renderFilasSuperficie();
       uocraBasicosVigentes = await cargarBasicosVigentesUocra();
       const fechaNuevaEl = document.getElementById('obra-fecha-nueva');
       if (fechaNuevaEl && !fechaNuevaEl.value) fechaNuevaEl.value = new Date().toISOString().slice(0, 10);
       calcularObra();
+      calcularApu();
+      calcularHorasM2();
+      cargarInteranualOficial();
       estadoEl.textContent = 'Básicos vigentes cargados. Completá cantidades/fechas y calculá.';
     } catch (err) {
       estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
@@ -1045,16 +1319,32 @@ async function init() {
     sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-item-${v.id}` === sel.id)));
   });
   document.getElementById('resumen-calcular')?.addEventListener('click', calcularPersonalizado);
+  document.querySelectorAll('button[id^="calc-calcular-"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.id.replace('calc-calcular-', '');
+      calcularVariacionVentana(VENTANAS.find(v => v.id === id));
+    });
+  });
 
-  document.getElementById('obra-calcular')?.addEventListener('click', calcularObra);
+  document.getElementById('obra-calcular')?.addEventListener('click', () => {
+    calcularObra();
+    calcularApu();
+    calcularHorasM2();
+  });
+  document.getElementById('obra-superficie-agregar')?.addEventListener('click', () => {
+    document.getElementById('obra-superficie-tbody').appendChild(filaSuperficie('Nuevo ambiente', 0, 100));
+  });
   document.getElementById('obra-redeterminar')?.addEventListener('click', calcularRedeterminacion);
   document.getElementById('obra-monto-base')?.addEventListener('input', actualizarMontosRedeterminados);
   document.getElementById('obra-monto-hoy')?.addEventListener('input', actualizarMontosRedeterminados);
   document.getElementById('obra-arquimedes')?.addEventListener('input', actualizarArquimedes);
   document.getElementById('obra-dolar')?.addEventListener('input', actualizarArquimedes);
-  document.getElementById('obra-k')?.addEventListener('input', calcularObra);
+  document.getElementById('obra-k')?.addEventListener('input', () => { calcularObra(); calcularHorasM2(); });
   document.getElementById('obra-superficie')?.addEventListener('input', calcularObra);
-  document.getElementById('obra-coef')?.addEventListener('input', calcularObra);
+  document.getElementById('obra-coef')?.addEventListener('input', () => { calcularObra(); calcularApu(); calcularHorasM2(); });
+  document.getElementById('apu-horas')?.addEventListener('input', calcularApu);
+  document.getElementById('apu-rendimiento')?.addEventListener('input', calcularApu);
+  document.getElementById('horasm2-tbody')?.addEventListener('input', calcularHorasM2);
 
   cargarVentana(VENTANAS[0]);
 }

@@ -10,6 +10,7 @@ import pickle
 import time
 from pathlib import Path
 
+import google.auth.exceptions
 import gspread
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -31,7 +32,15 @@ SHEET_NAME = "SIBRATECH_INDICES"
 PUBLIC_SHEET_NAME = "SIBRATECH_PUBLICO"
 
 BASE_DIR = Path(__file__).parent
-TOKEN_FILE = BASE_DIR / "token.pickle"
+
+# Token de sesión fuera del repo (OneDrive lo sincroniza y puede corromperlo
+# mientras se reescribe). Convención compartida: C:\SIBRA\<módulo>.
+# credentials.json queda acá: es config, no la reescribe el proceso.
+RUNTIME_DIR = Path(os.environ.get("SIBRA_INDICES_RUNTIME",
+                                  str(Path(os.environ.get("SIBRA_RUNTIME", r"C:\SIBRA")) / "indices")))
+RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+
+TOKEN_FILE = RUNTIME_DIR / "token.pickle"
 CREDS_FILE = BASE_DIR / "credentials.json"
 
 INDICES_SHEET_ID = os.environ.get("INDICES_SHEET_ID", "")
@@ -67,9 +76,18 @@ def get_credentials():
         with open(TOKEN_FILE, "rb") as f:
             creds = pickle.load(f)
     if not creds or not creds.valid:
+        refrescado = False
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
+            try:
+                creds.refresh(Request())
+                refrescado = True
+            except google.auth.exceptions.RefreshError:
+                # El refresh_token puede quedar revocado (6+ meses sin uso,
+                # o revocación manual en la cuenta de Google) — en ese caso
+                # NO alcanza con reintentar el refresh, hay que volver a
+                # loguearse a mano (abre navegador). Se cae al flujo de abajo.
+                print("[sheets] El refresh_token quedó revocado/vencido — hace falta volver a loguearse (se abre el navegador).")
+        if not refrescado:
             if not CREDS_FILE.exists():
                 raise RuntimeError(
                     "Falta api/credentials.json — descargar el OAuth client "

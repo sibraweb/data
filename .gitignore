@@ -14,3 +14,10 @@ Thumbs.db
 
 # Paquete de idioma OCR (18MB, se descarga aparte, no va al repo)
 tessdata/
+
+# Estado de runtime — vive en C:\SIBRA\<modulo>, no en el repo
+# (ver SIBRA_SERVER/PROCESO.md). No sincronizar por OneDrive ni versionar.
+token.pickle
+*.log
+perfil_chrome/
+*.sqlite3
