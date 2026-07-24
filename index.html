@@ -454,6 +454,7 @@ function render() {
         ${v.esAlquiler ? `<p class="estado" style="color:var(--red)">Fuente discontinuada (Buenos Aires Data) — no hay datos después de agosto 2019. Sirve como referencia histórica, no para decisiones con precios de hoy.</p>` : ''}
         <div class="estado" id="estado-${v.id}"></div>
         <div class="chart-box"><canvas id="chart-${v.id}"></canvas></div>
+        <div class="leyenda-tramos" id="leyenda-${v.id}" style="display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;font-size:12px;color:var(--ink)"></div>
         ${v.esRem ? `<div id="rem-extra-${v.id}"></div>` : ''}
         ${v.esUocra ? `<div id="uocra-vigentes"></div>` : ''}
         ${!v.esRem ? `
@@ -586,6 +587,22 @@ function dibujarCurvaCombinada(id, curva) {
     anclas.map((a, i) => [a, PALETA_TRAMOS[i % PALETA_TRAMOS.length]]));
   const colores = curva.map(c =>
     (c.ancla && colorTramo[c.ancla]) || FUENTE_COLOR[c.fuente] || '#5A6060');
+
+  // Referencia: solo las categorías que realmente aparecen en esta curva.
+  const leyendaEl = document.getElementById(`leyenda-${id}`);
+  if (leyendaEl) {
+    const items = [];
+    if (curva.some(c => c.fuente === 'real'))
+      items.push([FUENTE_COLOR.real, FUENTE_LABEL.real]);
+    if (curva.some(c => c.fuente === 'rem_mensual'))
+      items.push([FUENTE_COLOR.rem_mensual, FUENTE_LABEL.rem_mensual]);
+    anclas.forEach(a => items.push([colorTramo[a], `Repartido → ancla ${a}`]));
+    items.push(['#E10600', 'Acumulado (línea, base 100)']);
+    leyendaEl.innerHTML = items.map(([col, txt]) =>
+      `<span style="display:inline-flex;align-items:center;gap:5px">
+         <i style="width:11px;height:11px;border-radius:2px;background:${col};display:inline-block"></i>${txt}
+       </span>`).join('');
+  }
   let acumulado = 100;
   const acumulados = curva.map(c => { acumulado *= (1 + c.valor_pct / 100); return acumulado; });
 
