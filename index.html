@@ -1187,12 +1187,12 @@ async function cargarVentana(v) {
           return;
         }
         const curvaFiltrada = filtrarPorRango(
-          data.curva.map(c => ({ fecha: c.periodo, valor: c.valor_pct, fuente: c.fuente })), rango
+          data.curva.map(c => ({ fecha: c.periodo, valor: c.valor_pct, fuente: c.fuente, ancla: c.ancla })), rango
         );
         const conteo = curvaFiltrada.reduce((acc, c) => { acc[c.fuente] = (acc[c.fuente] || 0) + 1; return acc; }, {});
         const partes = Object.entries(conteo).map(([f, n]) => `${n} ${FUENTE_LABEL[f] || f}`).join(' · ');
         estadoEl.textContent = `Curva mensual combinada (color de cada punto = fuente): ${partes}`;
-        dibujarCurvaCombinada(v.id, curvaFiltrada.map(c => ({ periodo: c.fecha, valor_pct: c.valor, fuente: c.fuente })));
+        dibujarCurvaCombinada(v.id, curvaFiltrada.map(c => ({ periodo: c.fecha, valor_pct: c.valor, fuente: c.fuente, ancla: c.ancla })));
         await pintarResumenAnualRem(`rem-extra-${v.id}`, data);
         return;
       }
