@@ -83,7 +83,12 @@ def construir_curva_mensual(
         n = len(faltantes)
         tasa = ((factor_objetivo / factor_cubierto) ** (1 / n) - 1) * 100
         for c in faltantes:
-            mapa[c] = {"valor_pct": round(tasa, 2), "fuente": "rem_interanual_repartido"}
+            # `ancla` = contra qué proyección interanual se repartió este mes.
+            # Permite pintar cada tramo de un color distinto en el gráfico
+            # (hasta dic-26, dic-26→jul-27, jul-27→dic-27, …).
+            mapa[c] = {"valor_pct": round(tasa, 2),
+                       "fuente": "rem_interanual_repartido",
+                       "ancla": ancla["PERIODO"][:7]}
 
     return [{"periodo": f"{clave}-01", **datos} for clave, datos in sorted(mapa.items())]
 

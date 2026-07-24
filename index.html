@@ -164,6 +164,9 @@ const FUENTE_COLOR = {
   rem_mensual: '#1F6FEB',
   rem_interanual_repartido: '#B08800',
 };
+// Un color por TRAMO repartido (cada ancla interanual del REM: hasta dic-26,
+// dic-26→jul-27, jul-27→dic-27, …). Se asignan en orden cronológico.
+const PALETA_TRAMOS = ['#B08800', '#C2410C', '#9333EA', '#0D9488', '#BE123C', '#4F46E5'];
 
 const VENTANAS = [
   { id: 'resumen', nombre: 'Resumen', esResumen: true },
@@ -576,29 +579,36 @@ function dibujarCurvaCombinada(id, curva) {
   }
 
   const labels = curva.map(c => c.periodo);
-  const colores = curva.map(c => FUENTE_COLOR[c.fuente] || '#5A6060');
+  // Cada TRAMO repartido (hasta dic-26, dic-26→jul-27, jul-27→dic-27, …) va de un
+  // color distinto, para ver contra qué ancla del REM se proyectó cada mes.
+  const anclas = [...new Set(curva.filter(c => c.ancla).map(c => c.ancla))].sort();
+  const colorTramo = Object.fromEntries(
+    anclas.map((a, i) => [a, PALETA_TRAMOS[i % PALETA_TRAMOS.length]]));
+  const colores = curva.map(c =>
+    (c.ancla && colorTramo[c.ancla]) || FUENTE_COLOR[c.fuente] || '#5A6060');
   let acumulado = 100;
   const acumulados = curva.map(c => { acumulado *= (1 + c.valor_pct / 100); return acumulado; });
 
   charts[id] = new Chart(ctx, {
-    type: 'line',
+    // Mixto: los mensuales en COLUMNAS (coloreadas por origen del dato) y el
+    // acumulado compuesto en LÍNEA, para ver de un vistazo el aporte de cada mes
+    // y cómo se va componiendo.
+    type: 'bar',
     data: {
       labels,
       datasets: [
         {
+          type: 'bar',
           label: 'IPC mensual (%)',
           data: curva.map(c => c.valor_pct),
-          borderColor: '#5A6060',
-          backgroundColor: 'transparent',
-          pointBackgroundColor: colores,
-          pointBorderColor: colores,
-          pointRadius: 3,
-          pointHoverRadius: 5,
-          borderWidth: 1.5,
-          tension: 0.1,
+          backgroundColor: colores,
+          borderColor: colores,
+          borderWidth: 0,
           yAxisID: 'y',
+          order: 2,
         },
         {
+          type: 'line',
           label: 'Índice acumulado (base 100)',
           data: acumulados,
           borderColor: '#E10600',
@@ -607,6 +617,7 @@ function dibujarCurvaCombinada(id, curva) {
           borderWidth: 2,
           tension: 0.1,
           yAxisID: 'y1',
+          order: 1,
         },
       ],
     },
@@ -617,9 +628,12 @@ function dibujarCurvaCombinada(id, curva) {
         legend: { display: true, labels: { boxWidth: 12, font: { size: 11 } } },
         tooltip: {
           callbacks: {
-            afterLabel: (item) => item.datasetIndex === 0
-              ? `Fuente: ${FUENTE_LABEL[curva[item.dataIndex].fuente] || ''}`
-              : null,
+            afterLabel: (item) => {
+              if (item.datasetIndex !== 0) return null;
+              const c = curva[item.dataIndex];
+              const base = `Fuente: ${FUENTE_LABEL[c.fuente] || ''}`;
+              return c.ancla ? `${base} (ancla ${c.ancla})` : base;
+            },
           },
         },
       },
