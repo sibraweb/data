@@ -211,6 +211,7 @@ function render() {
           <div class="controles">
             <div class="campo"><label>Desde</label><input type="date" id="resumen-desde"></div>
             <div class="campo"><label>Hasta</label><input type="date" id="resumen-hasta"></div>
+            <div class="campo"><label>Monto a ajustar</label><input type="number" id="resumen-monto" placeholder="opcional" step="0.01" style="width:130px"></div>
             <div class="campo"><label>&nbsp;</label><button type="button" id="resumen-calcular">Calcular variación</button></div>
           </div>
           <div class="estado" id="estado-${v.id}"></div>
@@ -219,7 +220,7 @@ function render() {
               <thead><tr>
                 <th>Índice</th><th>Último valor</th><th>Fecha</th>
                 <th>Mes (MoM)</th><th>Año (YTD)</th><th>Interanual (YoY)</th>
-                <th>YoY anualizada</th><th>5 años</th><th>Personalizado</th>
+                <th>YoY anualizada</th><th>5 años</th><th>Personalizado</th><th>Monto ajustado</th>
               </tr></thead>
               <tbody id="tbody-resumen"></tbody>
             </table>
@@ -670,10 +671,31 @@ function celdaPct(v) {
   return `<td class="${cls}">${fmtPct(v)}</td>`;
 }
 
+// Último mapa {familia: variacion} del cálculo personalizado, para poder
+// reajustar el monto al vuelo sin volver a pegarle a la API.
+let resumenPersonalizados = null;
+
+// Coeficiente de ajuste de una fila: preferimos valor_hasta/valor_desde y, si no
+// vinieran, lo derivamos del % de variación.
+function coefDePersonalizado(p) {
+  if (!p) return null;
+  const vd = Number(p.valor_desde), vh = Number(p.valor_hasta);
+  if (isFinite(vd) && vd > 0 && isFinite(vh)) return vh / vd;
+  const pct = Number(p.variacion_pct);
+  return isFinite(pct) ? 1 + pct / 100 : null;
+}
+
 function pintarResumen(filas, personalizados) {
+  if (personalizados !== undefined) resumenPersonalizados = personalizados;
+  const usados = personalizados !== undefined ? personalizados : resumenPersonalizados;
+  const monto = Number(document.getElementById('resumen-monto')?.value);
   const tbody = document.getElementById('tbody-resumen');
   tbody.innerHTML = filas.map(f => {
-    const p = personalizados ? personalizados[f.familia] : null;
+    const p = usados ? usados[f.familia] : null;
+    const coef = coefDePersonalizado(p);
+    const ajustado = (monto && isFinite(monto) && coef != null)
+      ? (monto * coef).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '—';
     return `<tr>
       <td>${f.nombre}</td>
       <td>${fmtNum(f.ultimo_valor, 4)}</td>
@@ -684,6 +706,7 @@ function pintarResumen(filas, personalizados) {
       ${celdaPct(f.yoy_anualizada)}
       ${celdaPct(f.a5)}
       ${p ? celdaPct(p.variacion_pct) : '<td>—</td>'}
+      <td>${ajustado}</td>
     </tr>`;
   }).join('');
 }
@@ -1342,6 +1365,10 @@ async function init() {
     sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-item-${v.id}` === sel.id)));
   });
   document.getElementById('resumen-calcular')?.addEventListener('click', calcularPersonalizado);
+  // Reajusta la columna "Monto ajustado" al vuelo, con los coeficientes ya calculados.
+  document.getElementById('resumen-monto')?.addEventListener('input', () => {
+    if (resumenFilas?.length) pintarResumen(resumenFilas);
+  });
   document.querySelectorAll('button[id^="calc-calcular-"]').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.id.replace('calc-calcular-', '');

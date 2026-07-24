@@ -52,3 +52,51 @@ las fechas o el ajuste hay que apretar **Calcular variación** de nuevo.
 Ojo con el criterio de fechas: si la serie es mensual y la fecha pedida cae en
 medio de un mes, se usa el último dato publicado en o antes de esa fecha (ej. IPC
 del 3 de abril = el dato de fin de marzo).
+
+### Ajuste de monto en la pantalla Resumen
+
+La pestaña **Resumen** también tiene **"Monto a ajustar"**. Después de apretar
+**Calcular variación** (que llena la columna *Personalizado* con la variación de
+cada índice entre las dos fechas), la columna **"Monto ajustado"** muestra el
+importe llevado por **cada** índice:
+
+```
+coeficiente    = valor_hasta / valor_desde   (si no viniera, se deriva de la variación %)
+monto ajustado = monto × coeficiente
+```
+
+Sirve para comparar de un vistazo cuánto da el mismo importe ajustado por CER, por
+dólar, por IPC, etc. Se recalcula al vuelo mientras se tipea, sin volver a llamar
+a la API.
+
+## Proyección con el REM — la lógica (a generalizar)
+
+El REM da **tres cosas**: los **meses puntuales** (jul, ago, sep…), la **proyección
+a fin de año** (dic/dic) y la de los **próximos 12 meses**. La proyección se arma
+como una **cadena de anclas**, y en cada tramo se reparte **geométricamente**
+(nunca promediando — la inflación se compone):
+
+```
+objetivo del tramo   (1 + A)
+acumulado ya conocido(1 + a)
+falta                F = (1+A)/(1+a)
+meses restantes      r
+cada mes restante    F^(1/r) − 1        ← raíz r-ésima
+```
+
+Orden de prioridad por mes: **(1)** dato real de INDEC si ya se publicó → **(2)**
+curva mensual del último REM → **(3)** repartido geométrico contra el ancla
+interanual más cercana (dic/dic, o 12/24 meses hacia adelante). Ej.: se completa
+hasta dic-26 con el ancla de fin de año, y de dic-26 a jul-27 se vuelve a repartir
+geométricamente contra el ancla de los próximos 12 meses, descontando lo acumulado.
+
+**Estado:** implementado **solo para inflación** (`rem_interanual_repartido`, ver
+`api/proyeccion.py` y la tabla "REM anual" del front). **Pendiente:** generalizarlo
+a los demás índices, reemplazando la regresión OLS actual (que depende del R² y es
+más endeble).
+
+**Decisión abierta — cuál es el ancla de cada índice:**
+- **CER / UVA / UVI / ICL** → siguen el IPC ⇒ sirve el ancla de inflación del REM.
+- **Dólar** → el REM tiene su propia proyección de dólar.
+- **UOCRA / materiales / CAC** → ⚠ no hay ancla en el REM. Definir si se proyectan
+  con inflación o con una expectativa propia.
