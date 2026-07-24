@@ -458,6 +458,7 @@ function render() {
           <div class="controles">
             <div class="campo"><label>Desde</label><input type="date" id="calc-desde-${v.id}"></div>
             <div class="campo"><label>Hasta</label><input type="date" id="calc-hasta-${v.id}"></div>
+            <div class="campo"><label>Monto a ajustar</label><input type="number" id="calc-monto-${v.id}" placeholder="opcional" step="0.01" style="width:130px"></div>
             <div class="campo"><label>&nbsp;</label><button type="button" id="calc-calcular-${v.id}">Calcular variación</button></div>
           </div>
           <div class="estado" id="calc-estado-${v.id}"></div>
@@ -467,6 +468,7 @@ function render() {
                 <tr><td>Fecha usada (desde)</td><td id="calc-fecha-desde-${v.id}">—</td><td>Valor</td><td id="calc-valor-desde-${v.id}">—</td></tr>
                 <tr><td>Fecha usada (hasta)</td><td id="calc-fecha-hasta-${v.id}">—</td><td>Valor</td><td id="calc-valor-hasta-${v.id}">—</td></tr>
                 <tr><td>Variación</td><td id="calc-variacion-${v.id}">—</td><td>TIR anualizada</td><td id="calc-tir-${v.id}">—</td></tr>
+                <tr><td>Coeficiente</td><td id="calc-coef-${v.id}">—</td><td>Monto ajustado</td><td id="calc-monto-aj-${v.id}">—</td></tr>
               </tbody>
             </table>
           </div>
@@ -1005,6 +1007,22 @@ function datosVentanaActual(v) {
   return { familia, ajuste, item };
 }
 
+// Coeficiente de ajuste por ventana (valor_hasta / valor_desde) del último cálculo.
+const COEF_AJUSTE = {};
+
+function renderMontoAjustado(v) {
+  const coefEl  = document.getElementById(`calc-coef-${v.id}`);
+  const montoEl = document.getElementById(`calc-monto-aj-${v.id}`);
+  if (!coefEl || !montoEl) return;
+  const coef = COEF_AJUSTE[v.id];
+  if (coef == null) { coefEl.textContent = '—'; montoEl.textContent = '—'; return; }
+  coefEl.textContent = coef.toLocaleString('es-AR', { maximumFractionDigits: 4 });
+  const monto = Number(document.getElementById(`calc-monto-${v.id}`)?.value);
+  montoEl.textContent = (monto && isFinite(monto))
+    ? (monto * coef).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '—';
+}
+
 async function calcularVariacionVentana(v) {
   const estadoEl = document.getElementById(`calc-estado-${v.id}`);
   const { familia, ajuste, item } = datosVentanaActual(v);
@@ -1036,6 +1054,11 @@ async function calcularVariacionVentana(v) {
     cValorHasta.textContent = data.valor_hasta;
     cVariacion.textContent = `${data.variacion_pct > 0 ? '+' : ''}${data.variacion_pct}%`;
     cTir.textContent = data.tir_anualizada_pct != null ? `${data.tir_anualizada_pct > 0 ? '+' : ''}${data.tir_anualizada_pct}%` : '—';
+    // Coeficiente de ajuste = valor_hasta / valor_desde. Se guarda para poder
+    // reajustar el monto al vuelo sin volver a pegarle a la API.
+    const vd = Number(data.valor_desde), vh = Number(data.valor_hasta);
+    COEF_AJUSTE[v.id] = (vd > 0 && isFinite(vd) && isFinite(vh)) ? vh / vd : null;
+    renderMontoAjustado(v);
     estadoEl.textContent = `${data.dias} días entre las fechas usadas (último dato disponible en o antes de cada fecha pedida).`;
   } catch (err) {
     estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
@@ -1323,6 +1346,15 @@ async function init() {
     btn.addEventListener('click', () => {
       const id = btn.id.replace('calc-calcular-', '');
       calcularVariacionVentana(VENTANAS.find(v => v.id === id));
+    });
+  });
+
+  // Reajusta el monto al vuelo con el coeficiente ya calculado (sin pegarle a la API).
+  document.querySelectorAll('input[id^="calc-monto-"]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const id = inp.id.replace('calc-monto-', '');
+      const v = VENTANAS.find(x => x.id === id);
+      if (v) renderMontoAjustado(v);
     });
   });
 

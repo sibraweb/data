@@ -29,3 +29,26 @@ previsión del REM. Siempre muestra el **R²** del ajuste junto al gráfico —
 es un ajuste histórico simple, no un modelo econométrico, así que hay que
 mirar el R² antes de confiar en la extrapolación (si es bajo, esa serie no
 se explica bien por CER/dólar solos).
+
+## Calcular entre dos fechas — ajustar un monto
+
+Debajo de cada gráfico está el bloque **"Calcular entre dos fechas"**, que corre
+sobre la MISMA serie graficada (con el ajuste elegido) y devuelve la variación %
+y la TIR anualizada entre las dos fechas.
+
+Además del %, se puede **ajustar un importe**: se carga un valor en **"Monto a
+ajustar"** y la tabla muestra el **coeficiente** y el **monto ajustado**:
+
+```
+coeficiente    = valor_hasta / valor_desde
+monto ajustado = monto × coeficiente
+```
+
+Sirve para responder "si en tal fecha esto costaba $X, ¿a cuánto equivale hoy
+según este índice?". El monto se recalcula **al vuelo** mientras se tipea, usando
+el coeficiente del último cálculo — no vuelve a pegarle a la API. Si se cambian
+las fechas o el ajuste hay que apretar **Calcular variación** de nuevo.
+
+Ojo con el criterio de fechas: si la serie es mensual y la fecha pedida cae en
+medio de un mes, se usa el último dato publicado en o antes de esa fecha (ej. IPC
+del 3 de abril = el dato de fin de marzo).
