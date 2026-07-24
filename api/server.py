@@ -42,6 +42,7 @@ from flask_cors import CORS
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import db
 import sheets
 from ajuste import ajustar
 from proyeccion import estimar_modelo, proyectar
@@ -188,6 +189,52 @@ def _sheet_id():
     return sid
 
 
+# Migración a Supabase (Fase 6, ver SIBRA_SERVER/PROCESO.md) — todas las tabs
+# de "series_valores" (simples y anchas) ya viven en Postgres. REM,
+# UOCRA_ADICIONALES y MATERIALES_HISTORICO tienen sus propias tablas (ver
+# más abajo, no encajan en el formato genérico fecha/valor).
+SERIES_SIMPLES_SUPABASE = {
+    "CER", "UVA", "UVI", "ICL", "INFLACION_INDEC", "BADLAR", "TAMAR", "BAIBAR",
+    "DEPOSITOS_30D", "ADELANTOS_CTA_CTE", "PRESTAMOS_PERSONALES", "TIM",
+    "RIESGO_PAIS", "MERVAL",
+}
+SERIES_ANCHAS_SUPABASE = {
+    "DOLAR", "UOCRA", "CONSTRUCCION", "CAC", "SALARIOS",
+    "ICC_CABA", "ICC_BUENOS_AIRES", "ICC_CORDOBA", "ICC_SANTA_FE",
+    "ALQUILER_CABA", "RIPTE",
+}
+SERIES_EN_SUPABASE = SERIES_SIMPLES_SUPABASE | SERIES_ANCHAS_SUPABASE
+REM_EN_SUPABASE = True
+UOCRA_ADICIONALES_EN_SUPABASE = True
+MATERIALES_HISTORICO_EN_SUPABASE = True
+
+
+def _leer(tab: str) -> list[dict]:
+    """Lee una pestaña: de Postgres si ya fue migrada, sino de Sheets — mismo
+    shape de salida en los dos casos, el resto del código no distingue."""
+    if tab in SERIES_SIMPLES_SUPABASE:
+        return db.leer_serie_simple(tab)
+    if tab in SERIES_ANCHAS_SUPABASE:
+        return db.leer_serie_ancha(tab)
+    return sheets.read_records(_sheet_id(), tab)
+
+
+def _guardar_simple(tab: str, rows: list[dict]) -> int:
+    """rows = [{"FECHA":.., "VALOR":..}, ...]. Escribe en Postgres si la tab
+    ya fue migrada, sino en Sheets — mismo comportamiento append-only en
+    los dos casos (ON CONFLICT/upsert_series nunca corrigen, solo agregan)."""
+    if tab in SERIES_SIMPLES_SUPABASE:
+        return db.upsert_valores_simple(tab, rows)
+    return sheets.upsert_series(_sheet_id(), tab, ["FECHA", "VALOR"], "FECHA", rows)
+
+
+def _guardar_ancha(tab: str, headers: list[str], rows: list[dict]) -> int:
+    """rows = [{"FECHA":.., col1:.., col2:.., ...}, ...] (headers sin "FECHA")."""
+    if tab in SERIES_ANCHAS_SUPABASE:
+        return db.upsert_valores_ancha_bulk(tab, rows, headers)
+    return sheets.upsert_series(_sheet_id(), tab, ["FECHA"] + headers, "FECHA", rows)
+
+
 # ── Series propias ──────────────────────────────────────────────────────────
 
 @app.route("/api/series/<familia>")
@@ -195,13 +242,13 @@ def get_serie(familia):
     cfg = SERIES.get(familia)
     if not cfg:
         return jsonify({"error": f"familia desconocida: {familia}"}), 404
-    records = sheets.read_records(_sheet_id(), cfg["tab"])
+    records = _leer(cfg["tab"])
     return jsonify(records)
 
 
 @app.route("/api/series/dolar")
 def get_dolar():
-    records = sheets.read_records(_sheet_id(), DOLAR_TAB)
+    records = _leer(DOLAR_TAB)
     return jsonify(records)
 
 
@@ -237,10 +284,13 @@ def _cotizaciones_material(id_proveedor: str, descripcion: str | None = None) ->
                                         cache_key=f"obra_cotizaciones:{id_proveedor}")
         if str(r.get("ID_PROVEEDOR")) == id_proveedor
     ]
-    historico = [
-        r for r in sheets.read_records(_sheet_id(), "MATERIALES_HISTORICO")
-        if str(r.get("ID_PROVEEDOR")) == id_proveedor
-    ]
+    if MATERIALES_HISTORICO_EN_SUPABASE:
+        historico = db.leer_materiales_historico(id_proveedor)
+    else:
+        historico = [
+            r for r in sheets.read_records(_sheet_id(), "MATERIALES_HISTORICO")
+            if str(r.get("ID_PROVEEDOR")) == id_proveedor
+        ]
     combinado = historico + vivo
     if descripcion:
         combinado = [r for r in combinado if r.get("DESCRIPCION") == descripcion]
@@ -288,7 +338,7 @@ def _curva_rem_actual(tipo: str) -> tuple[str | None, list[dict]]:
     tab = REM_TABS.get(tipo)
     if not tab:
         return None, []
-    records = sheets.read_records(_sheet_id(), tab)
+    records = db.leer_rem(tipo) if REM_EN_SUPABASE else sheets.read_records(_sheet_id(), tab)
     if not records:
         return None, []
     ultima_fecha = max(r["FECHA_PRONOSTICO"] for r in records)
@@ -311,7 +361,7 @@ def _curva_rem_interanual() -> tuple[str | None, list[dict]]:
     """Curva interanual completa (cualquier mes objetivo) del relevamiento
     MÁS RECIENTE — incluye tanto los "dic-YY" (año calendario completo) como
     los anclajes intermedios ("jun-YY", 12/24 meses hacia adelante)."""
-    records = sheets.read_records(_sheet_id(), REM_INTERANUAL_TAB)
+    records = db.leer_rem("ipc_interanual") if REM_EN_SUPABASE else sheets.read_records(_sheet_id(), REM_INTERANUAL_TAB)
     if not records:
         return None, []
     ultima_fecha = max(r["FECHA_PRONOSTICO"] for r in records)
@@ -347,7 +397,7 @@ def get_rem_estimaciones():
         return jsonify({"error": "no hay REM interanual cargado todavía (correr refresh de rem)"}), 422
 
     _, curva_mensual_rem = _curva_rem_actual("ipc")
-    inflacion_real = sheets.read_records(sid, "INFLACION_INDEC")
+    inflacion_real = _leer("INFLACION_INDEC")
 
     reales = [{"PERIODO": r["FECHA"], "VALOR": r["VALOR"]} for r in inflacion_real]
     rem_mensual = [{"PERIODO": r["PERIODO"], "MEDIANA": r["MEDIANA"]} for r in curva_mensual_rem]
@@ -372,11 +422,10 @@ def get_proyeccion():
             "error": f"familia no proyectable: {familia} (usar: {', '.join(sorted(PROYECTABLES))})"
         }), 404
 
-    sid = _sheet_id()
     cfg = SERIES[familia]
-    objetivo = sheets.read_records(sid, cfg["tab"])
-    cer = sheets.read_records(sid, "CER")
-    dolar = sheets.read_records(sid, DOLAR_TAB)
+    objetivo = _leer(cfg["tab"])
+    cer = _leer("CER")
+    dolar = _leer(DOLAR_TAB)
 
     modelo = estimar_modelo(objetivo, cfg["fecha_col"], cfg["valor_col"], cer, dolar)
     if modelo is None:
@@ -426,11 +475,11 @@ def _serie_indice(nombre_indice: str):
     """Devuelve (records, fecha_col, valor_col) para un nombre de índice elegible en el selector de ajuste."""
     if nombre_indice in ("cer", "uva"):
         cfg = SERIES[nombre_indice]
-        return sheets.read_records(_sheet_id(), cfg["tab"]), cfg["fecha_col"], cfg["valor_col"]
+        return _leer(cfg["tab"]), cfg["fecha_col"], cfg["valor_col"]
     if nombre_indice == "ipc":
         return _resolver_familia("ipc_nivel")
     if nombre_indice in DOLAR_COLUMNAS:
-        return sheets.read_records(_sheet_id(), DOLAR_TAB), "FECHA", DOLAR_COLUMNAS[nombre_indice]
+        return _leer(DOLAR_TAB), "FECHA", DOLAR_COLUMNAS[nombre_indice]
     if nombre_indice in INDICES_MATERIALES:
         id_prov, descripcion = INDICES_MATERIALES[nombre_indice]
         registros = _cotizaciones_material(id_prov, descripcion)
@@ -457,13 +506,13 @@ def _resolver_familia(familia: str, item: str | None = None):
     Devuelve (None, None, None) si no se reconoce."""
     if familia == "ipc_nivel":
         cfg = SERIES["inflacion_indec"]
-        registros_pct = sheets.read_records(_sheet_id(), cfg["tab"])
+        registros_pct = _leer(cfg["tab"])
         nivel = _construir_indice_nivel(registros_pct, cfg["fecha_col"], cfg["valor_col"])
         return nivel, cfg["fecha_col"], cfg["valor_col"]
 
     if familia in SERIES:
         cfg = SERIES[familia]
-        return sheets.read_records(_sheet_id(), cfg["tab"]), cfg["fecha_col"], cfg["valor_col"]
+        return _leer(cfg["tab"]), cfg["fecha_col"], cfg["valor_col"]
 
     if ":" in familia:
         tipo, sub = familia.split(":", 1)
@@ -471,13 +520,13 @@ def _resolver_familia(familia: str, item: str | None = None):
         if tipo in SERIES_MULTI_COLUMNA:
             cfg = SERIES_MULTI_COLUMNA[tipo]
             col = sub if sub in cfg["columnas"] else cfg["columnas"][0]
-            return sheets.read_records(_sheet_id(), cfg["tab"]), cfg["fecha_col"], col
+            return _leer(cfg["tab"]), cfg["fecha_col"], col
 
         if tipo == "dolar":
             col = DOLAR_COLUMNAS.get(sub)
             if not col:
                 return None, None, None
-            return sheets.read_records(_sheet_id(), DOLAR_TAB), "FECHA", col
+            return _leer(DOLAR_TAB), "FECHA", col
 
         if tipo == "mat":
             registros = _cotizaciones_material(sub, item)
@@ -584,11 +633,10 @@ def get_variacion():
 # ── Refresh manual + scheduler ──────────────────────────────────────────────
 
 def _refrescar_series_bcra(lista):
-    sid = _sheet_id()
     for tab, fetch_fn in lista:
         serie = fetch_fn()
-        n = sheets.upsert_series(sid, tab, ["FECHA", "VALOR"], "FECHA",
-                                  [{"FECHA": r["fecha"], "VALOR": r["valor"]} for r in serie])
+        rows = [{"FECHA": r["fecha"], "VALOR": r["valor"]} for r in serie]
+        n = _guardar_simple(tab, rows)
         print(f"[scheduler] {tab} +{n} filas")
 
 
@@ -601,92 +649,85 @@ def refrescar_bcra_mensuales():
 
 
 def refrescar_tim():
-    sid = _sheet_id()
     serie = tim.fetch_tim()
-    n = sheets.upsert_series(sid, "TIM", ["FECHA", "VALOR"], "FECHA", serie)
+    n = _guardar_simple("TIM", serie)
     print(f"[scheduler] TIM +{n} filas")
 
 
 def refrescar_riesgo_pais():
-    sid = _sheet_id()
     serie = argentinadatos.fetch_riesgo_pais()
-    n = sheets.upsert_series(sid, "RIESGO_PAIS", ["FECHA", "VALOR"], "FECHA", serie)
+    n = _guardar_simple("RIESGO_PAIS", serie)
     print(f"[scheduler] RIESGO_PAIS +{n} filas")
 
 
 def refrescar_merval():
-    sid = _sheet_id()
     serie = investing.fetch_merval()
-    n = sheets.upsert_series(sid, "MERVAL", ["FECHA", "VALOR"], "FECHA", serie)
+    n = _guardar_simple("MERVAL", serie)
     print(f"[scheduler] MERVAL +{n} filas")
 
 
 def refrescar_cac():
-    sid = _sheet_id()
     serie = camarco.fetch_cac()
-    headers = ["FECHA", "COSTO_CONSTRUCCION", "MATERIALES", "MANO_DE_OBRA"]
-    n = sheets.upsert_series(sid, "CAC", headers, "FECHA", serie)
+    headers = ["COSTO_CONSTRUCCION", "MATERIALES", "MANO_DE_OBRA"]
+    n = _guardar_ancha("CAC", headers, serie)
     print(f"[scheduler] CAC +{n} filas (CAMARCO/cifrasonline no siempre tiene el último mes)")
 
 
 def refrescar_salarios():
-    sid = _sheet_id()
     serie = salarios.fetch_salarios()
-    headers = ["FECHA", "PRIVADO_REGISTRADO", "PUBLICO", "TOTAL_REGISTRADO", "NO_REGISTRADO", "INDICE_TOTAL"]
-    n = sheets.upsert_series(sid, "SALARIOS", headers, "FECHA", serie)
+    headers = ["PRIVADO_REGISTRADO", "PUBLICO", "TOTAL_REGISTRADO", "NO_REGISTRADO", "INDICE_TOTAL"]
+    n = _guardar_ancha("SALARIOS", headers, serie)
     print(f"[scheduler] SALARIOS +{n} filas")
 
 
 def refrescar_icc():
-    sid = _sheet_id()
     datos = icc.fetch_icc()
-    headers = ["FECHA", "GENERAL", "MATERIALES", "MANO_DE_OBRA", "GASTOS"]
+    headers = ["GENERAL", "MATERIALES", "MANO_DE_OBRA", "GASTOS"]
     for clave, serie in datos.items():
-        n = sheets.upsert_series(sid, f"ICC_{clave}", headers, "FECHA", serie)
+        n = _guardar_ancha(f"ICC_{clave}", headers, serie)
         print(f"[scheduler] ICC_{clave} +{n} filas")
 
 
 def refrescar_alquileres():
-    sid = _sheet_id()
     serie = alquileres.fetch_alquileres()
-    headers = ["FECHA", "PRECIO_2_AMBIENTES", "PRECIO_3_AMBIENTES", "PROMEDIO"]
-    n = sheets.upsert_series(sid, "ALQUILER_CABA", headers, "FECHA", serie)
+    headers = ["PRECIO_2_AMBIENTES", "PRECIO_3_AMBIENTES", "PROMEDIO"]
+    n = _guardar_ancha("ALQUILER_CABA", headers, serie)
     print(f"[scheduler] ALQUILER_CABA +{n} filas (fuente discontinuada, no pasa de ago-2019)")
 
 
 def refrescar_uocra():
-    sid = _sheet_id()
     headers = [
-        "FECHA", "OFICIAL_ESPECIALIZADO", "OFICIAL", "MEDIO_OFICIAL", "AYUDANTE", "SERENO",
+        "OFICIAL_ESPECIALIZADO", "OFICIAL", "MEDIO_OFICIAL", "AYUDANTE", "SERENO",
         "OFICIAL_ESPECIALIZADO_NO_REM", "OFICIAL_NO_REM", "MEDIO_OFICIAL_NO_REM",
         "AYUDANTE_NO_REM", "SERENO_NO_REM",
     ]
     serie = uocra.fetch_uocra()
-    n = sheets.upsert_series(sid, "UOCRA", headers, "FECHA", serie)
+    n = _guardar_ancha("UOCRA", headers, serie)
     print(f"[scheduler] UOCRA +{n} filas (algunos meses solo salen como PDF escaneado, sin OCR quedan para carga manual; "
           f"no remunerativo no siempre se puede leer por formato inconsistente del PDF fuente)")
 
-    adic_headers = ["CLAVE", "CONCEPTO", "VALOR", "UNIDAD", "DESDE", "HASTA"]
     adicionales = uocra.fetch_adicionales_76_75()
-    n2 = sheets.upsert_series(sid, "UOCRA_ADICIONALES", adic_headers, "CLAVE", adicionales)
+    if UOCRA_ADICIONALES_EN_SUPABASE:
+        n2 = db.upsert_uocra_adicionales_bulk(adicionales)
+    else:
+        adic_headers = ["CLAVE", "CONCEPTO", "VALOR", "UNIDAD", "DESDE", "HASTA"]
+        n2 = sheets.upsert_series(_sheet_id(), "UOCRA_ADICIONALES", adic_headers, "CLAVE", adicionales)
     print(f"[scheduler] UOCRA_ADICIONALES +{n2} filas (aporte solidario + contribución empresarial, solo 76/75)")
 
 
 def refrescar_dolar():
-    sid = _sheet_id()
     fila = dolares.fetch_actual()
-    headers = ["FECHA", "OFICIAL_COMPRA", "OFICIAL_VENTA", "BLUE_COMPRA", "BLUE_VENTA",
+    headers = ["OFICIAL_COMPRA", "OFICIAL_VENTA", "BLUE_COMPRA", "BLUE_VENTA",
                "MEP_COMPRA", "MEP_VENTA", "CCL_COMPRA", "CCL_VENTA",
                "MAYORISTA_COMPRA", "MAYORISTA_VENTA", "CRIPTO_COMPRA", "CRIPTO_VENTA",
                "TARJETA_COMPRA", "TARJETA_VENTA"]
-    n = sheets.upsert_series(sid, DOLAR_TAB, headers, "FECHA", [fila])
+    n = _guardar_ancha(DOLAR_TAB, headers, [fila])
     print(f"[scheduler] DOLAR +{n} filas")
 
 
 def refrescar_ripte():
-    sid = _sheet_id()
     serie = ripte.fetch_serie()
-    n = sheets.upsert_series(sid, "RIPTE", ["FECHA", "PERIODO", "RIPTE", "VARIACION_MENSUAL"], "FECHA", serie)
+    n = _guardar_ancha("RIPTE", ["RIPTE", "VARIACION_MENSUAL"], serie)
     print(f"[scheduler] RIPTE +{n} filas")
 
 
@@ -695,15 +736,21 @@ def refrescar_rem():
     datos = bcra_rem.fetch_rem()
     for tipo, tab in REM_TABS.items():
         filas = datos.get(tipo, [])
-        for f in filas:
-            f["CLAVE"] = f"{f['FECHA_PRONOSTICO']}|{f['PERIODO']}"
-        n = sheets.upsert_series(sid, tab, REM_HEADERS, "CLAVE", filas)
+        if REM_EN_SUPABASE:
+            n = db.upsert_rem_bulk(tipo, filas)
+        else:
+            for f in filas:
+                f["CLAVE"] = f"{f['FECHA_PRONOSTICO']}|{f['PERIODO']}"
+            n = sheets.upsert_series(sid, tab, REM_HEADERS, "CLAVE", filas)
         print(f"[scheduler] {tab} +{n} filas")
 
     interanual = datos.get("ipc_interanual", [])
-    for f in interanual:
-        f["CLAVE"] = f"{f['FECHA_PRONOSTICO']}|{f['PERIODO']}"
-    n2 = sheets.upsert_series(sid, REM_INTERANUAL_TAB, REM_INTERANUAL_HEADERS, "CLAVE", interanual)
+    if REM_EN_SUPABASE:
+        n2 = db.upsert_rem_bulk("ipc_interanual", interanual)
+    else:
+        for f in interanual:
+            f["CLAVE"] = f"{f['FECHA_PRONOSTICO']}|{f['PERIODO']}"
+        n2 = sheets.upsert_series(sid, REM_INTERANUAL_TAB, REM_INTERANUAL_HEADERS, "CLAVE", interanual)
     print(f"[scheduler] {REM_INTERANUAL_TAB} +{n2} filas")
 
 
@@ -734,12 +781,24 @@ def refrescar_manual(fuente):
     return jsonify({"status": "ok"})
 
 
+# Estado de la sincronización inicial. El front lo consulta para refrescar solo
+# cuando entraron datos nuevos (antes el server no abría el puerto hasta terminar
+# de sincronizar TODO, y parecía colgado varios minutos).
+SYNC_INICIAL = {"listo": False, "hechas": 0, "total": 0, "actual": None}
+
+
 def iniciar_scheduler():
+    SYNC_INICIAL["total"] = len(FUENTES_MANUALES)
     for nombre, fn in FUENTES_MANUALES.items():
+        SYNC_INICIAL["actual"] = nombre
         try:
             fn()
         except Exception as exc:
             print(f"[scheduler] primer refresh de {nombre} falló: {exc}")
+        SYNC_INICIAL["hechas"] += 1
+    SYNC_INICIAL["actual"] = None
+    SYNC_INICIAL["listo"] = True
+    print("[scheduler] sincronización inicial completa")
 
     sched = BackgroundScheduler(timezone="America/Argentina/Buenos_Aires")
 
@@ -781,7 +840,18 @@ def index():
     return send_from_directory(BASE_DIR, "index.html")
 
 
+@app.get("/api/estado-sync")
+def estado_sync():
+    """Progreso de la sincronización inicial. El front lo consulta para refrescar
+    la vista cuando terminan de entrar los datos nuevos."""
+    return jsonify(SYNC_INICIAL)
+
+
 if __name__ == "__main__":
+    import threading
     port = int(os.environ.get("FLASK_PORT", 8100))
-    iniciar_scheduler()
+    # La sincronización inicial va en segundo plano: el server queda disponible
+    # al instante y los datos van entrando mientras tanto.
+    threading.Thread(target=iniciar_scheduler, daemon=True).start()
+    print(f"[server] escuchando en http://0.0.0.0:{port} (sincronizando en segundo plano…)")
     app.run(host="0.0.0.0", port=port, debug=False)

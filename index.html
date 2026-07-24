@@ -67,6 +67,7 @@
 <header><h1>Sibratech <span>·</span> Índices en vivo</h1></header>
 
 <nav class="tabs" id="tabs"></nav>
+<div id="estado-sync" style="max-width:1200px;margin:6px auto 0;padding:0 12px;font-size:12px;color:var(--muted,#5A6060)"></div>
 
 <main>
   <div id="ventanas"></div>
@@ -1440,6 +1441,31 @@ async function init() {
 }
 
 init();
+
+// La sincronización inicial corre en segundo plano en el server: mostramos el
+// progreso y, cuando termina de entrar la data nueva, refrescamos la vista sola.
+(function vigilarSyncInicial() {
+  const el = document.getElementById('estado-sync');
+  let listoPrevio = null;
+  const tick = async () => {
+    try {
+      const r = await fetch(`${API}/api/estado-sync`);
+      if (!r.ok) return;                       // backend viejo, sin el endpoint
+      const s = await r.json();
+      if (el) el.textContent = s.listo
+        ? ''
+        : `Sincronizando datos… ${s.hechas}/${s.total}${s.actual ? ` · ${s.actual}` : ''}`;
+      if (listoPrevio === false && s.listo === true) {
+        const activa = document.querySelector('.ventana.active');
+        const v = VENTANAS.find(x => `ventana-${x.id}` === activa?.id);
+        if (v) cargarVentana(v);              // entraron datos nuevos → refrescar
+      }
+      listoPrevio = s.listo;
+      if (!s.listo) setTimeout(tick, 5000);
+    } catch { /* server no disponible todavía */ }
+  };
+  tick();
+})();
 </script>
 </body>
 </html>
