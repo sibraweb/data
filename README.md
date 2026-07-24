@@ -86,9 +86,21 @@ cada mes restante    F^(1/r) − 1        ← raíz r-ésima
 
 Orden de prioridad por mes: **(1)** dato real de INDEC si ya se publicó → **(2)**
 curva mensual del último REM → **(3)** repartido geométrico contra el ancla
-interanual más cercana (dic/dic, o 12/24 meses hacia adelante). Ej.: se completa
-hasta dic-26 con el ancla de fin de año, y de dic-26 a jul-27 se vuelve a repartir
-geométricamente contra el ancla de los próximos 12 meses, descontando lo acumulado.
+interanual más cercana (dic/dic, o 12/24 meses hacia adelante).
+
+El encadenado es **recursivo** — cada ancla arranca desde lo ya acumulado:
+
+```
+ene…jun-26      IPC real (INDEC)
+jul…nov-26      REM mensual (los meses que el REM publica uno por uno)
+… → dic-26      ancla fin de año        → geométrico sobre lo que falta
+dic-26 → jul-27 ancla próximos 12 meses → geométrico, descontando lo acumulado
+jul-27 → dic-27 ancla fin de año        → geométrico otra vez
+… y así indefinidamente
+```
+
+Lo único que cambia en cada tramo es **cuál es el ancla**; el mecanismo es siempre
+`objetivo ÷ acumulado → raíz r-ésima`.
 
 **Estado:** implementado **solo para inflación** (`rem_interanual_repartido`, ver
 `api/proyeccion.py` y la tabla "REM anual" del front). **Pendiente:** generalizarlo
