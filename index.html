@@ -68,6 +68,7 @@
 
 <nav class="tabs" id="tabs"></nav>
 <div id="estado-sync" style="max-width:1200px;margin:6px auto 0;padding:0 12px;font-size:12px;color:var(--muted,#5A6060)"></div>
+<div id="kpi-uso" title="Uso de la base Supabase (plan free = 500 MB)" style="max-width:1200px;margin:4px auto 0;padding:0 12px;font-size:12px"></div>
 
 <main>
   <div id="ventanas"></div>
@@ -1441,6 +1442,28 @@ async function init() {
 }
 
 init();
+
+// KPI de uso de la base (plan free 500 MB). Barrita con color según cercanía al límite.
+(async function kpiUso() {
+  const el = document.getElementById('kpi-uso');
+  if (!el) return;
+  try {
+    const r = await fetch(`${API}/api/uso-supabase`);
+    if (!r.ok) return;
+    const u = await r.json();
+    const color = u.pct >= 80 ? '#DC2626' : u.pct >= 50 ? '#D97706' : '#16A34A';
+    const top = (u.top_tablas || []).slice(0, 3)
+      .map(t => `${t.tabla} ${t.mb} MB`).join(' · ');
+    el.innerHTML =
+      `<span style="color:var(--muted,#5A6060)">Base Supabase:</span>
+       <b style="color:${color}">${u.usado_mb} MB</b>
+       <span style="color:var(--muted,#5A6060)">de ${u.limite_mb} MB (${u.pct}%)</span>
+       <span style="display:inline-block;width:120px;height:7px;border-radius:4px;background:#e5e7eb;vertical-align:middle;margin:0 6px;overflow:hidden">
+         <span style="display:block;height:100%;width:${Math.min(u.pct,100)}%;background:${color}"></span>
+       </span>
+       <span style="color:var(--muted,#9AA0A0);font-size:11px">${top}</span>`;
+  } catch { /* server no disponible */ }
+})();
 
 // La sincronización inicial corre en segundo plano en el server: mostramos el
 // progreso y, cuando termina de entrar la data nueva, refrescamos la vista sola.

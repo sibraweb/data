@@ -847,6 +847,15 @@ def estado_sync():
     return jsonify(SYNC_INICIAL)
 
 
+@app.get("/api/uso-supabase")
+def uso_supabase():
+    """KPI de uso de la base (plan free = 500 MB) para anticipar el límite."""
+    try:
+        return jsonify(db.uso_supabase())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     import threading
     port = int(os.environ.get("FLASK_PORT", 8100))
