@@ -340,6 +340,47 @@ def upsert_valores_ancha_bulk(serie: str, registros: list[dict], headers: list[s
     return len(tuplas)
 
 
+def guardar_curva_cauciones(curva: list[dict]) -> int:
+    """Snapshot de la curva completa de cauciones — SE PISA entera en cada
+    refresh (no es histórico, es la foto de ahora; el histórico de 4 plazos
+    de referencia va aparte, a series_valores/CAUCION). Si `curva` viene
+    vacía (BYMA no respondió), NO se toca la tabla — mejor dato viejo que
+    tabla vacía."""
+    if not curva:
+        return 0
+    with _conectar() as conn:
+        with conn.cursor() as cur:
+            cur.execute("truncate table mercado_curva_cauciones")
+            cur.executemany(
+                """INSERT INTO mercado_curva_cauciones
+                   (plazo_dias, vencimiento, tasa, tasa_cierre_anterior, bid, offer, volumen, actualizado_en)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s, now())""",
+                [(c["plazo_dias"], c.get("vencimiento"), c.get("tasa"), c.get("tasa_cierre_anterior"),
+                  c.get("bid"), c.get("offer"), c.get("volumen")) for c in curva],
+            )
+        conn.commit()
+    return len(curva)
+
+
+def guardar_tasas_mav(filas: list[dict]) -> int:
+    """Snapshot de tasas MAV (cheques/pagarés) — mismo criterio: se pisa
+    entera, no-op si viene vacía."""
+    if not filas:
+        return 0
+    with _conectar() as conn:
+        with conn.cursor() as cur:
+            cur.execute("truncate table mercado_tasas_mav")
+            cur.executemany(
+                """INSERT INTO mercado_tasas_mav
+                   (instrumento, moneda, segmento, rango, tna, tea, tem, monto, actualizado_en)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s, now())""",
+                [(f["instrumento"], f["moneda"], f["segmento"], f["rango"],
+                  f.get("tna"), f.get("tea"), f.get("tem"), f.get("monto")) for f in filas],
+            )
+        conn.commit()
+    return len(filas)
+
+
 # ── KPI de uso de Supabase (plan free = 500 MB) ──────────────────────────────
 LIMITE_MB = 500  # plan free de Supabase
 

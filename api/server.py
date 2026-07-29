@@ -49,7 +49,7 @@ from proyeccion import estimar_modelo, proyectar
 from rem_estimaciones import construir_curva_mensual, resumen_por_anio
 from resumen import resumen_serie
 from resumen import variacion as calcular_variacion
-from scrapers import alquileres, argentinadatos, bcra, bcra_rem, camarco, cauciones, dolares, icc, investing, ripte, salarios, tim, uocra
+from scrapers import alquileres, argentinadatos, bcra, bcra_rem, camarco, cauciones, dolares, icc, investing, mav, ripte, salarios, tim, uocra
 
 load_dotenv()
 
@@ -743,9 +743,20 @@ def refrescar_dolar():
 
 
 def refrescar_caucion():
-    fila = cauciones.fetch_actual()
+    # Un solo fetch a BYMA alimenta las dos tablas: el histórico de 4 plazos
+    # de referencia (series_valores/CAUCION) y la foto completa en vivo
+    # (mercado_curva_cauciones, se pisa entera — no es histórico).
+    curva = cauciones.curva_completa()
+    fila = cauciones.referencia_desde_curva(curva)
     n = _guardar_ancha(CAUCION_TAB, list(cauciones.PLAZOS_REFERENCIA), [fila])
-    print(f"[scheduler] CAUCION +{n} filas")
+    m = db.guardar_curva_cauciones(curva)
+    print(f"[scheduler] CAUCION +{n} filas históricas, curva completa {m} plazos")
+
+
+def refrescar_mav():
+    filas = mav.fetch_todo()
+    n = db.guardar_tasas_mav(filas)
+    print(f"[scheduler] MAV (cheques/pagarés) {n} filas")
 
 
 def refrescar_ripte():
@@ -782,6 +793,7 @@ FUENTES_MANUALES = {
     "bcra_mensuales": refrescar_bcra_mensuales,
     "dolar": refrescar_dolar,
     "caucion": refrescar_caucion,
+    "mav": refrescar_mav,
     "ripte": refrescar_ripte,
     "rem": refrescar_rem,
     "tim": refrescar_tim,
@@ -830,6 +842,7 @@ def iniciar_scheduler():
     sched.add_job(refrescar_bcra_diarias, "interval", hours=6)
     sched.add_job(refrescar_dolar, "interval", hours=4)
     sched.add_job(refrescar_caucion, "interval", hours=4)
+    sched.add_job(refrescar_mav, "interval", hours=4)
     sched.add_job(refrescar_riesgo_pais, "cron", hour=9)
     sched.add_job(refrescar_merval, "cron", hour=20)  # después del cierre de rueda
     sched.add_job(refrescar_tim, "cron", hour=9, minute=15)

@@ -29,8 +29,12 @@ def _pct(x):
         return None
 
 
-def _curva() -> list[dict]:
-    """[{plazo_dias, tasa}] en pesos, ordenada por plazo. [] si BYMA no responde."""
+def curva_completa() -> list[dict]:
+    """Curva completa en pesos (hasta ~83 plazos): [{plazo_dias, vencimiento,
+    tasa, tasa_cierre_anterior, bid, offer, volumen}] ordenada por plazo.
+    [] si BYMA no responde. Es una FOTO del momento (no histórico) — se
+    persiste en mercado_curva_cauciones, que se PISA entera en cada refresh
+    (mismo patrón que brokers_tenencias)."""
     try:
         r = requests.post(
             URL, json={"excludeZeroPxAndQty": False, "T2": True, "T1": False, "T0": False},
@@ -47,22 +51,34 @@ def _curva() -> list[dict]:
         plazo = x.get("daysToMaturity")
         if tasa is None or plazo is None:
             continue
-        curva.append({"plazo_dias": plazo, "tasa": tasa})
+        curva.append({
+            "plazo_dias": plazo, "vencimiento": x.get("maturityDate"),
+            "tasa": tasa, "tasa_cierre_anterior": _pct(x.get("previousClosingPrice")),
+            "bid": _pct(x.get("bidPrice")), "offer": _pct(x.get("offerPrice")),
+            "volumen": round(x.get("volumeAmount") or 0, 2),
+        })
     curva.sort(key=lambda c: c["plazo_dias"])
     return curva
 
 
-def fetch_actual() -> dict:
-    """{"FECHA": "YYYY-MM-DD", "TASA_1D":.., "TASA_7D":.., ...} — la tasa más
-    cercana a cada plazo de referencia. Columnas en None si BYMA no respondió
-    (upsert_valores_ancha_bulk ya ignora columnas None, no pisa lo que hay)."""
+def referencia_desde_curva(curva: list[dict]) -> dict:
+    """{"FECHA": "YYYY-MM-DD", "TASA_1D":.., ...} — la tasa más cercana a cada
+    plazo de referencia, a partir de una curva ya obtenida (no vuelve a pegarle
+    a BYMA). Columnas en None si la curva viene vacía (upsert_valores_ancha_bulk
+    ignora columnas None, no pisa lo que ya había)."""
     import datetime as dt
 
-    curva = _curva()
     fila: dict = {"FECHA": dt.date.today().isoformat()}
     for col, plazo in PLAZOS_REFERENCIA.items():
         fila[col] = min(curva, key=lambda c: abs(c["plazo_dias"] - plazo))["tasa"] if curva else None
     return fila
+
+
+def fetch_actual() -> dict:
+    """Atajo para uso suelto/manual (pega a BYMA una vez). El scheduler real
+    (server.refrescar_caucion) usa curva_completa() + referencia_desde_curva()
+    para persistir curva e histórico con un solo fetch."""
+    return referencia_desde_curva(curva_completa())
 
 
 if __name__ == "__main__":
