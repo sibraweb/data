@@ -10,7 +10,7 @@ organismo — varias de estas se "publican" a diario pero en el fondo
 dependen de un único dato mensual, ver notas de cada grupo):
 
   DIARIO (mercado — cambian de verdad día a día):
-    DOLAR, RIESGO_PAIS, MERVAL, BADLAR, TAMAR, BAIBAR, DEPOSITOS_30D,
+    DOLAR, CAUCION, RIESGO_PAIS, MERVAL, BADLAR, TAMAR, BAIBAR, DEPOSITOS_30D,
     ADELANTOS_CTA_CTE, PRESTAMOS_PERSONALES, TIM
 
   MENSUAL, ~día 18 (derivan todas de un único dato mensual — IPC o RIPTE —
@@ -49,7 +49,7 @@ from proyeccion import estimar_modelo, proyectar
 from rem_estimaciones import construir_curva_mensual, resumen_por_anio
 from resumen import resumen_serie
 from resumen import variacion as calcular_variacion
-from scrapers import alquileres, argentinadatos, bcra, bcra_rem, camarco, dolares, icc, investing, ripte, salarios, tim, uocra
+from scrapers import alquileres, argentinadatos, bcra, bcra_rem, camarco, cauciones, dolares, icc, investing, ripte, salarios, tim, uocra
 
 load_dotenv()
 
@@ -110,6 +110,12 @@ DOLAR_COLUMNAS = {
     "dolar_mayorista": "MAYORISTA_VENTA",
 }
 
+# Cauciones en pesos (BYMA, tasa TNA %) — curva completa en vivo la sigue
+# dando financiamiento.py (Vinculacion bancos, puerto 8300); acá se persiste
+# el histórico de 4 plazos de referencia para poder graficarlo, mismo patrón
+# que DOLAR (ver scrapers/cauciones.py).
+CAUCION_TAB = "CAUCION"
+
 # Familias con más de una columna elegible dentro de la misma hoja (ej.
 # "construccion:MATERIALES" o "cac:MANO_DE_OBRA") — se suman a SERIES, que
 # solo permite una columna fija por familia.
@@ -135,6 +141,8 @@ SERIES_MULTI_COLUMNA = {
                      "columnas": ["GENERAL", "MATERIALES", "MANO_DE_OBRA", "GASTOS"]},
     "alquiler_caba": {"tab": "ALQUILER_CABA", "fecha_col": "FECHA",
                       "columnas": ["PROMEDIO", "PRECIO_2_AMBIENTES", "PRECIO_3_AMBIENTES"]},
+    "caucion": {"tab": "CAUCION", "fecha_col": "FECHA",
+                "columnas": ["TASA_1D", "TASA_7D", "TASA_14D", "TASA_30D"]},
 }
 
 # Series que aparecen en la tabla Resumen (nombre visible -> familia resoluble
@@ -159,6 +167,9 @@ RESUMEN_SERIES = [
     ("Alquiler CABA (promedio, fuente 2013-2019)", "alquiler_caba:PROMEDIO"),
     ("Riesgo país", "riesgo_pais"),
     ("MERVAL", "merval"),
+    ("Caución 1 día", "caucion:TASA_1D"),
+    ("Caución 7 días", "caucion:TASA_7D"),
+    ("Caución 30 días", "caucion:TASA_30D"),
 ]
 
 # Proveedores de materiales ya cargados en Obra vía el pipeline de Gmail
@@ -201,7 +212,7 @@ SERIES_SIMPLES_SUPABASE = {
 SERIES_ANCHAS_SUPABASE = {
     "DOLAR", "UOCRA", "CONSTRUCCION", "CAC", "SALARIOS",
     "ICC_CABA", "ICC_BUENOS_AIRES", "ICC_CORDOBA", "ICC_SANTA_FE",
-    "ALQUILER_CABA", "RIPTE",
+    "ALQUILER_CABA", "RIPTE", "CAUCION",
 }
 SERIES_EN_SUPABASE = SERIES_SIMPLES_SUPABASE | SERIES_ANCHAS_SUPABASE
 REM_EN_SUPABASE = True
@@ -249,6 +260,12 @@ def get_serie(familia):
 @app.route("/api/series/dolar")
 def get_dolar():
     records = _leer(DOLAR_TAB)
+    return jsonify(records)
+
+
+@app.route("/api/series/caucion")
+def get_caucion():
+    records = _leer(CAUCION_TAB)
     return jsonify(records)
 
 
@@ -725,6 +742,12 @@ def refrescar_dolar():
     print(f"[scheduler] DOLAR +{n} filas")
 
 
+def refrescar_caucion():
+    fila = cauciones.fetch_actual()
+    n = _guardar_ancha(CAUCION_TAB, list(cauciones.PLAZOS_REFERENCIA), [fila])
+    print(f"[scheduler] CAUCION +{n} filas")
+
+
 def refrescar_ripte():
     serie = ripte.fetch_serie()
     n = _guardar_ancha("RIPTE", ["RIPTE", "VARIACION_MENSUAL"], serie)
@@ -758,6 +781,7 @@ FUENTES_MANUALES = {
     "bcra_diarias": refrescar_bcra_diarias,
     "bcra_mensuales": refrescar_bcra_mensuales,
     "dolar": refrescar_dolar,
+    "caucion": refrescar_caucion,
     "ripte": refrescar_ripte,
     "rem": refrescar_rem,
     "tim": refrescar_tim,
@@ -805,6 +829,7 @@ def iniciar_scheduler():
     # Diario — mercado, cambia de verdad día a día
     sched.add_job(refrescar_bcra_diarias, "interval", hours=6)
     sched.add_job(refrescar_dolar, "interval", hours=4)
+    sched.add_job(refrescar_caucion, "interval", hours=4)
     sched.add_job(refrescar_riesgo_pais, "cron", hour=9)
     sched.add_job(refrescar_merval, "cron", hour=20)  # después del cierre de rueda
     sched.add_job(refrescar_tim, "cron", hour=9, minute=15)
