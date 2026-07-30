@@ -56,5 +56,47 @@ def fetch_todo() -> list[dict]:
     return out
 
 
+def _num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _rango_dias(rango):
+    """'0-30' -> 0 (extremo corto, para ordenar y elegir la referencia)."""
+    try:
+        return int(str(rango).split("-")[0])
+    except (ValueError, IndexError):
+        return 10**9
+
+
+def referencia_por_segmento(filas: list[dict]) -> dict:
+    """De las filas YA obtenidas (fetch_todo, sin pegarle de nuevo a MAV):
+    para cada segmento, la TNA del rango de plazo más corto (punta de la
+    curva — mismo criterio que el plazo de 1 día en cauciones). Columnas
+    tipo SEGMENTO_CORTO (ascii, sin espacios) -> valor.
+    {"FECHA": "YYYY-MM-DD", "AVALADO_CORTO": .., "GARANTIZADO_CORTO": .., ...}"""
+    import unicodedata
+
+    def col(segmento):
+        s = unicodedata.normalize("NFKD", str(segmento)).encode("ascii", "ignore").decode()
+        return s.strip().upper().replace(" ", "_") + "_CORTO"
+
+    mejor = {}  # segmento -> (rango_dias, tna)
+    for f in filas:
+        tna = _num(f.get("tna"))
+        if tna is None:
+            continue
+        rd = _rango_dias(f.get("rango"))
+        seg = f.get("segmento") or "SIN_SEGMENTO"
+        if seg not in mejor or rd < mejor[seg][0]:
+            mejor[seg] = (rd, tna)
+    fila = {"FECHA": dt.date.today().isoformat()}
+    for seg, (_, tna) in mejor.items():
+        fila[col(seg)] = tna
+    return fila
+
+
 if __name__ == "__main__":
     print(fetch_todo())

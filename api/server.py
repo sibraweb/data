@@ -212,7 +212,7 @@ SERIES_SIMPLES_SUPABASE = {
 SERIES_ANCHAS_SUPABASE = {
     "DOLAR", "UOCRA", "CONSTRUCCION", "CAC", "SALARIOS",
     "ICC_CABA", "ICC_BUENOS_AIRES", "ICC_CORDOBA", "ICC_SANTA_FE",
-    "ALQUILER_CABA", "RIPTE", "CAUCION",
+    "ALQUILER_CABA", "RIPTE", "CAUCION", "CHEQUES", "PAGARES",
 }
 SERIES_EN_SUPABASE = SERIES_SIMPLES_SUPABASE | SERIES_ANCHAS_SUPABASE
 REM_EN_SUPABASE = True
@@ -267,6 +267,16 @@ def get_dolar():
 def get_caucion():
     records = _leer(CAUCION_TAB)
     return jsonify(records)
+
+
+@app.route("/api/series/cheques")
+def get_cheques():
+    return jsonify(_leer("CHEQUES"))
+
+
+@app.route("/api/series/pagares")
+def get_pagares():
+    return jsonify(_leer("PAGARES"))
 
 
 # ── Materiales (leídos de Obra, no de nuestra Sheet) ────────────────────────
@@ -754,9 +764,23 @@ def refrescar_caucion():
 
 
 def refrescar_mav():
-    filas = mav.fetch_todo()
-    n = db.guardar_tasas_mav(filas)
-    print(f"[scheduler] MAV (cheques/pagarés) {n} filas")
+    # Un fetch por instrumento (cheques/pagarés tienen segmentos distintos,
+    # no hay que mezclarlos al elegir la referencia de plazo corto) — el
+    # snapshot completo (mercado_tasas_mav) junta todo, el histórico va
+    # separado por instrumento a series_valores/CHEQUES y /PAGARES.
+    todas = []
+    for instrumento, tab in (("cheques", "CHEQUES"), ("pagares", "PAGARES")):
+        filas = mav.tasas_instrumento(instrumento)
+        todas += filas
+        if not filas:
+            continue
+        fila_ref = mav.referencia_por_segmento(filas)
+        cols = [c for c in fila_ref if c != "FECHA"]
+        if cols:
+            n = _guardar_ancha(tab, cols, [fila_ref])
+            print(f"[scheduler] {tab} +{n} filas históricas ({', '.join(cols)})")
+    n = db.guardar_tasas_mav(todas)
+    print(f"[scheduler] MAV (cheques/pagarés) {n} filas snapshot")
 
 
 def refrescar_ripte():
