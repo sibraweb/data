@@ -135,6 +135,38 @@ def upsert_valores_simple(serie: str, rows: list[dict], fecha_col: str = "FECHA"
     return len(tuplas)
 
 
+def upsert_resumen_publico(filas: list[dict]) -> int:
+    """Snapshot diario del Resumen para la pagina publica.
+
+    Reemplaza a la Sheet publica desde 2026-08-02: el front (Vercel) lee esta
+    tabla directo con la publishable key. `indices_resumen_publico` es la unica
+    tabla con policy de lectura para `anon` — ver el comentario en server.py.
+
+    Idempotente por `clave` (= fecha|familia): correr el job dos veces el mismo
+    dia actualiza la fila, no la duplica."""
+    if not filas:
+        return 0
+    cols = ["clave", "fecha_publicacion", "familia", "nombre", "ultimo_valor",
+            "ultima_fecha", "mom", "d30", "ytd", "yoy", "yoy_anualizada", "a5"]
+    def _fecha(v):
+        return v or None
+    tuplas = [tuple(_num(f.get(c)) if c not in ("clave", "fecha_publicacion",
+                                                "familia", "nombre", "ultima_fecha")
+                    else _fecha(f.get(c)) for c in cols) for f in filas]
+    ph = ",".join(["%s"] * len(cols))
+    setter = ",".join(f"{c}=excluded.{c}" for c in cols[1:])
+    with _conectar() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(
+                f"""INSERT INTO indices_resumen_publico ({",".join(cols)})
+                    VALUES ({ph})
+                    ON CONFLICT (clave) DO UPDATE SET {setter}, actualizado = now()""",
+                tuplas,
+            )
+        conn.commit()
+    return len(tuplas)
+
+
 def upsert_valores_ancha(serie: str, fecha: str, valores: dict) -> int:
     """Para una fila 'ancha' (ej. un día de DOLAR con 14 columnas, o un mes de
     UOCRA con 10): inserta una fila por columna con valor presente.

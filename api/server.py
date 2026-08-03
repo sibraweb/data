@@ -595,21 +595,29 @@ def get_resumen():
     return jsonify(filas)
 
 
-# ── Publicación diaria a la Sheet pública (SIBRATECH_PUBLICO) ───────────────
-# Foto de la pantalla Resumen, un snapshot por día — pensado para alimentar
-# después la página sibratech.com.ar (con el Design System propio). Mismo
-# mecanismo (tab "CLAVE"=FECHA|FAMILIA en la Sheet pública, solo valores
-# planos) queda listo para sumar más adelante otra tab con la cotización de
-# las obras tipo (ej. la casa) cuando esa base exista — no se publica nada
-# de eso todavía, solo el Resumen.
-PUBLICO_RESUMEN_HEADERS = [
-    "CLAVE", "FECHA_PUBLICACION", "FAMILIA", "NOMBRE",
+# ── Publicación diaria del Resumen ──────────────────────────────────────────
+# Snapshot por día del Resumen, para alimentar la página pública.
+#
+# 2026-08-02: **va a Supabase, ya no a la Sheet pública.** Decisión de Juan al
+# ver que el front se publica por Vercel: un estático puede leer Supabase
+# directo con la *publishable key* — mismo patrón que ya usa Market Suite
+# (login Supabase Auth + RLS, establecido 2026-07-29). Ventajas concretas:
+#   - el dato sale **en vivo**; la Sheet mostraba la foto del último job
+#   - se cae una dependencia de OAuth (el token vence cada 7 días en Testing)
+#   - desaparece un paso que podía fallar callado
+# Drive queda SOLO para el backup periódico de la regla de 2 años
+# (RETENCION_DATOS.md), no como camino de publicación.
+#
+# `indices_resumen_publico` es la ÚNICA tabla con policy de lectura para
+# `anon`. El resto del negocio no se expone: el front usa la publishable key,
+# nunca la service_role.
+PUBLICO_RESUMEN_COLS = [
+    "clave", "fecha_publicacion", "familia", "nombre",
     "ultimo_valor", "ultima_fecha", "mom", "d30", "ytd", "yoy", "yoy_anualizada", "a5",
 ]
 
 
 def publicar_resumen():
-    sid_publico = sheets.ensure_public_sheet()
     hoy = dt.date.today().isoformat()
 
     filas = []
@@ -618,12 +626,15 @@ def publicar_resumen():
         r = resumen_serie(records or [], fecha_col or "FECHA", valor_col or "VALOR")
         if not r:
             continue
-        fila = {"FECHA_PUBLICACION": hoy, "FAMILIA": familia, "NOMBRE": nombre, **r}
-        fila["CLAVE"] = f"{hoy}|{familia}"
-        filas.append(fila)
+        r = {k.lower(): v for k, v in r.items()}
+        filas.append({
+            "clave": f"{hoy}|{familia}", "fecha_publicacion": hoy,
+            "familia": familia, "nombre": nombre,
+            **{c: r.get(c) for c in PUBLICO_RESUMEN_COLS[4:]},
+        })
 
-    n = sheets.upsert_series(sid_publico, "RESUMEN", PUBLICO_RESUMEN_HEADERS, "CLAVE", filas)
-    print(f"[scheduler] RESUMEN público +{n} filas -> https://docs.google.com/spreadsheets/d/{sid_publico}")
+    n = db.upsert_resumen_publico(filas)
+    print(f"[scheduler] RESUMEN público: {n} filas en Supabase (indices_resumen_publico)")
 
 
 @app.route("/api/variacion")
