@@ -143,6 +143,25 @@ SERIES_MULTI_COLUMNA = {
                       "columnas": ["PROMEDIO", "PRECIO_2_AMBIENTES", "PRECIO_3_AMBIENTES"]},
     "caucion": {"tab": "CAUCION", "fecha_col": "FECHA",
                 "columnas": ["TASA_1D", "TASA_7D", "TASA_14D", "TASA_30D"]},
+    # Cheques/echeqs y pagarés de MAV: TNA de la punta corta de la curva, por
+    # segmento y moneda. Pedido de Juan (2026-08-09): tenerlos siempre a la
+    # vista, en pesos y en dólares. ⚠ **Cheques en dólares no existe en MAV**
+    # (ver scrapers/mav.py), por eso la familia `cheques` solo tiene pesos.
+    "cheques": {"tab": "CHEQUES", "fecha_col": "FECHA",
+                "columnas": ["AVALADO_CORTO", "GARANTIZADO_CORTO", "NO_GARANTIZADO_CORTO"]},
+    "pagares": {"tab": "PAGARES", "fecha_col": "FECHA",
+                "columnas": ["AVALADO_CORTO", "GARANTIZADO_CORTO", "NO_GARANTIZADO_CORTO",
+                             "AVALADO_CORTO_USD", "GARANTIZADO_CORTO_USD", "NO_GARANTIZADO_CORTO_USD",
+                             "AVALADO_CORTO_DL", "GARANTIZADO_CORTO_DL", "NO_GARANTIZADO_CORTO_DL"]},
+}
+
+# Series que son TASAS (% anual), no índices de nivel. La distinción importa:
+# la variación porcentual de una tasa engaña — BADLAR de 30 % a 35 % es
+# "+16,7 %" pero son **+5 puntos**, y el número que se lee es el segundo.
+# El Resumen las muestra en un bloque aparte, con variación en PUNTOS.
+SERIES_TASAS = {
+    "badlar", "baibar", "tamar", "depositos_30d", "adelantos_cta_cte",
+    "prestamos_personales", "caucion", "cheques", "pagares",
 }
 
 # Series que aparecen en la tabla Resumen (nombre visible -> familia resoluble
@@ -277,6 +296,116 @@ def get_cheques():
 @app.route("/api/series/pagares")
 def get_pagares():
     return jsonify(_leer("PAGARES"))
+
+
+# ── Financiamiento: cheques, pagarés y caución, todo junto ──────────────────
+#
+# Pedido de Juan (2026-08-09): *"lo que quiero tener todo el tiempo es las
+# tasas en pesos y dólares de cheques y pagarés avalados, garantizados y no
+# avalados, las tasas de caución, y lo demás sí en tarjetas"*.
+#
+# Este endpoint arma las TARJETAS: el último valor de cada tasa **con la fecha
+# de ese valor**. La fecha no es decorativa — si el job de MAV no corre, la
+# tarjeta seguiría mostrando un número viejo como si fuera de hoy, que es
+# exactamente cómo se envejecen los datos sin que nadie se entere.
+#
+# El histórico para graficar sale de `/api/series/{caucion,cheques,pagares}`.
+
+_SEGMENTOS_CARD = [("AVALADO", "Avalado"), ("GARANTIZADO", "Garantizado"),
+                   ("NO_GARANTIZADO", "No garantizado")]
+_MONEDAS_CARD = [("", "Pesos"), ("_USD", "Dólares"), ("_DL", "Dólar linked")]
+
+# Las tasas del BCRA, en el orden en que se leen juntas: primero lo que se
+# paga por colocar, después lo que cuesta pedir. Ese contraste es la lectura
+# útil — el spread entre las dos puntas.
+_TASAS_BCRA = [
+    ("badlar", "BADLAR (plazo fijo mayorista)"),
+    ("baibar", "BAIBAR (interbancaria)"),
+    ("tamar", "TAMAR (mayorista, plazos largos)"),
+    ("depositos_30d", "Plazo fijo 30 días (minorista)"),
+    ("adelantos_cta_cte", "Adelantos en cuenta corriente"),
+    ("prestamos_personales", "Préstamos personales"),
+]
+# ⚠ **TIM no va acá.** Se llama "Tasa de Intereses Moratorios" y parece una
+# tasa, pero la serie que publica el BCRA es un **coeficiente acumulado con
+# base 03/06/1993 = 1** — hoy vale ~161.660. Puesto como tarjeta de TNA
+# mostraba "161.660,14 %". Se usa como el CER: coeficiente de una fecha
+# dividido el de otra, para calcular intereses moratorios entre dos fechas.
+# Va con los índices de nivel, no con las tasas.
+
+
+def _ultimo_por_columna(tab):
+    """{columna: (valor, fecha)} con el último valor NO vacío de cada columna,
+    cada uno con SU fecha.
+
+    No alcanza con tomar la última fila entera: un día puede haber operado solo
+    el plazo de 1 día, y entonces las otras columnas aparecerían "sin dato"
+    aunque tengan un valor de la semana pasada. Cada tasa trae su propia fecha
+    y la tarjeta la muestra — un número viejo se puede usar sabiendo que es
+    viejo; uno viejo disfrazado de actual, no.
+    """
+    ultimos = {}
+    for r in sorted(_leer(tab) or [], key=lambda x: str(x.get("FECHA") or "")):
+        fecha = r.get("FECHA")
+        for k, v in r.items():
+            if k != "FECHA" and v not in (None, ""):
+                ultimos[k] = (v, fecha)
+    return ultimos
+
+
+@app.route("/api/financiamiento")
+def get_financiamiento():
+    salida = {}
+
+    # Cheques y pagarés: segmento × moneda. Solo se listan las monedas que ese
+    # instrumento acepta de verdad — cheques en dólares NO existe en MAV, y es
+    # mejor no mostrar la columna que mostrarla siempre vacía.
+    for familia, tab in (("cheques", "CHEQUES"), ("pagares", "PAGARES")):
+        ultimos = _ultimo_por_columna(tab)
+        cols = SERIES_MULTI_COLUMNA[familia]["columnas"]
+        bloques = []
+        for sufijo, etiqueta_moneda in _MONEDAS_CARD:
+            tasas = []
+            for seg, etiqueta in _SEGMENTOS_CARD:
+                col = f"{seg}_CORTO{sufijo}"
+                if col not in cols:
+                    continue
+                v, f = ultimos.get(col, (None, None))
+                tasas.append({"segmento": etiqueta, "columna": col, "fecha": f,
+                              "tna": float(v) if v not in (None, "") else None})
+            if tasas:
+                bloques.append({"moneda": etiqueta_moneda, "sufijo": sufijo, "tasas": tasas})
+        salida[familia] = {"monedas": bloques}
+
+    # Caución: por plazo. El histórico lo guarda Índices; la curva completa en
+    # vivo (~83 plazos) la sirve Tesorería en el 8300 — son complementarios.
+    ultimos = _ultimo_por_columna(CAUCION_TAB)
+    plazos = []
+    for col in SERIES_MULTI_COLUMNA["caucion"]["columnas"]:
+        v, f = ultimos.get(col, (None, None))
+        n = col.replace("TASA_", "").replace("D", "")
+        plazos.append({"plazo": f"{n} día" + ("" if n == "1" else "s"),
+                       "columna": col, "fecha": f,
+                       "tna": float(v) if v not in (None, "") else None})
+    salida["caucion"] = {"plazos": plazos}
+
+    # El resto de las tasas — las del BCRA. Estaban cargadas desde hace años
+    # (BADLAR y BAIBAR desde 2001, adelantos desde 2009, TIM desde 1993) y
+    # **no se veían en ninguna pantalla**: ni ventana propia ni fila en el
+    # Resumen. Juan lo notó el 2026-08-09.
+    bcra_tasas = []
+    for familia, etiqueta in _TASAS_BCRA:
+        tab = SERIES[familia]["tab"]
+        recs = sorted((_leer(tab) or []), key=lambda x: str(x.get("FECHA") or ""))
+        ult = next((r for r in reversed(recs)
+                    if r.get(SERIES[familia]["valor_col"]) not in (None, "")), None)
+        bcra_tasas.append({
+            "familia": familia, "nombre": etiqueta,
+            "fecha": ult.get("FECHA") if ult else None,
+            "tna": float(ult[SERIES[familia]["valor_col"]]) if ult else None,
+        })
+    salida["bcra"] = {"tasas": bcra_tasas}
+    return jsonify(salida)
 
 
 # ── Materiales (leídos de Obra, no de nuestra Sheet) ────────────────────────
@@ -775,23 +904,140 @@ def refrescar_caucion():
 
 
 def refrescar_mav():
-    # Un fetch por instrumento (cheques/pagarés tienen segmentos distintos,
-    # no hay que mezclarlos al elegir la referencia de plazo corto) — el
-    # snapshot completo (mercado_tasas_mav) junta todo, el histórico va
+    # Un fetch por instrumento Y por moneda (cheques y pagarés tienen segmentos
+    # distintos, no hay que mezclarlos al elegir la referencia de plazo corto)
+    # — el snapshot completo (mercado_tasas_mav) junta todo, el histórico va
     # separado por instrumento a series_valores/CHEQUES y /PAGARES.
+    #
+    # ⚠ Los headers salen de `columnas_posibles`, no de lo que vino hoy: si un
+    # día no opera el segmento 'garantizado', la columna tiene que seguir
+    # existiendo o la serie ancha se desarma.
+    #
+    # 📌 Pedido de Juan (2026-08-09): tener siempre a la vista cheques y
+    # pagarés en pesos Y en dólares, por segmento. **Cheques en dólares no
+    # existe en MAV** — ver el docstring de `scrapers/mav.py`.
     todas = []
-    for instrumento, tab in (("cheques", "CHEQUES"), ("pagares", "PAGARES")):
-        filas = mav.tasas_instrumento(instrumento)
+    for instrumento, (tab, monedas) in mav.INSTRUMENTOS.items():
+        filas = []
+        for moneda in monedas:
+            filas += mav.tasas_instrumento(instrumento, moneda)
         todas += filas
-        if not filas:
-            continue
         fila_ref = mav.referencia_por_segmento(filas)
-        cols = [c for c in fila_ref if c != "FECHA"]
-        if cols:
-            n = _guardar_ancha(tab, cols, [fila_ref])
-            print(f"[scheduler] {tab} +{n} filas históricas ({', '.join(cols)})")
+        if not fila_ref:
+            print(f"[scheduler] {tab} sin datos hoy (fin de semana o feriado)")
+            continue
+        cols = mav.columnas_posibles(instrumento)
+        n = _guardar_ancha(tab, cols, [fila_ref])
+        vistos = [c for c in fila_ref if c != "FECHA"]
+        print(f"[scheduler] {tab} +{n} filas históricas ({', '.join(vistos)})")
     n = db.guardar_tasas_mav(todas)
     print(f"[scheduler] MAV (cheques/pagarés) {n} filas snapshot")
+
+
+def backfill_mav(desde: str, hasta: str | None = None) -> dict:
+    """Rellena el histórico de CHEQUES y PAGARES pegándole a MAV día por día.
+
+    Se puede porque la API acepta `fecha` para días pasados — relevado el
+    2026-08-09, hay al menos dos años disponibles. Antes se creía que era una
+    foto irrecuperable del día, y por eso la serie tenía 6 filas.
+
+    Es LENTO a propósito (pausa entre requests): son ~250 días hábiles por año
+    y por instrumento. Correrlo una vez, no dejarlo en el scheduler.
+    """
+    d0 = dt.date.fromisoformat(desde)
+    d1 = dt.date.fromisoformat(hasta) if hasta else dt.date.today()
+    salida = {}
+    for instrumento, (tab, _monedas) in mav.INSTRUMENTOS.items():
+        filas = mav.serie_diaria(instrumento, d0, d1)
+        n = _guardar_ancha(tab, mav.columnas_posibles(instrumento), filas) if filas else 0
+        salida[tab] = {"dias_con_dato": len(filas), "guardadas": n}
+        print(f"[backfill] {tab}: {len(filas)} días con dato, {n} guardadas")
+    return salida
+
+
+def backfill_caucion_desde_brokers() -> dict:
+    """Rellena el histórico de CAUCION con la tasa REALMENTE pagada, sacada de
+    las operaciones de `public.brokers_cauciones`.
+
+    Por qué hace falta: BYMA devuelve **la curva de hoy**, no una serie. El job
+    corrió tres días de julio y quedaron 12 filas — y lo no capturado no se
+    puede recuperar de BYMA. Pero las cauciones propias sí están guardadas
+    desde abril de 2024, con capital, interés y plazo, así que la TNA sale de
+    ahí:
+
+        TNA = interes / capital * 365 / (vencimiento - inicio) * 100
+
+    ⚠ Es una tasa **distinta** a la de BYMA: es la que Sibra pagó, no la de
+    referencia del mercado. Se guarda en las mismas columnas de plazo porque
+    responde la misma pregunta ("a cuánto estaba la caución"), pero conviene
+    saber de dónde salió cada tramo — el de BYMA es de fines de julio de 2026.
+
+    Filtro: plazo 1-40 días e interés > 0. Sin eso entran las operaciones que
+    vencen el mismo día (plazo 0 → la fórmula explota: aparecen TNAs de 40.000 %).
+    """
+    if not os.environ.get("SUPABASE_DB_URL"):
+        return {"error": "falta SUPABASE_DB_URL — esta serie sale de Supabase, "
+                         "no de Sheets"}
+    # Cada operación cae en el plazo de referencia más cercano por abajo, así
+    # una caución de 3 días alimenta TASA_1D y no TASA_30D.
+    sql = """
+        with base as (
+          select start_date::date d,
+                 (maturity_date::date - start_date::date) plazo,
+                 capital::numeric cap, interest::numeric intr
+            from public.brokers_cauciones
+           where currency = 'ARS'
+             and capital  ~ '^[0-9.]+$'
+             and interest ~ '^-?[0-9.]+$'
+        ), ok as (
+          select d, plazo, (intr / nullif(cap, 0)) * 365.0 / plazo * 100 tna
+            from base
+           where plazo between 1 and 40 and cap > 0 and intr > 0
+        ), clasificada as (
+          select d,
+                 case when plazo <= 3  then 'TASA_1D'
+                      when plazo <= 10 then 'TASA_7D'
+                      when plazo <= 20 then 'TASA_14D'
+                      else 'TASA_30D' end col,
+                 tna
+            from ok
+        )
+        select d::text fecha, col,
+               round(percentile_cont(0.5) within group (order by tna)::numeric, 2) tna
+          from clasificada
+         group by d, col
+         order by d
+    """
+    por_fecha = {}
+    with db.psycopg.connect(os.environ["SUPABASE_DB_URL"],
+                            row_factory=db.dict_row) as con:
+        for r in con.execute(sql):
+            por_fecha.setdefault(r["fecha"], {"FECHA": r["fecha"]})[r["col"]] = float(r["tna"])
+    filas = [por_fecha[f] for f in sorted(por_fecha)]
+    n = _guardar_ancha(CAUCION_TAB, list(cauciones.PLAZOS_REFERENCIA), filas) if filas else 0
+    print(f"[backfill] CAUCION desde brokers_cauciones: {len(filas)} días, {n} guardadas")
+    return {"dias": len(filas), "guardadas": n,
+            "desde": filas[0]["FECHA"] if filas else None,
+            "hasta": filas[-1]["FECHA"] if filas else None}
+
+
+@app.post("/api/backfill/caucion")
+def post_backfill_caucion():
+    """Histórico de caución a partir de las operaciones propias de brokers."""
+    return jsonify(backfill_caucion_desde_brokers())
+
+
+@app.post("/api/backfill/mav")
+def post_backfill_mav():
+    """Backfill del histórico de cheques/pagarés. `?desde=YYYY-MM-DD[&hasta=]`.
+    Tarda minutos: es un request por día hábil y por moneda."""
+    desde = request.args.get("desde")
+    if not desde:
+        return jsonify({"error": "falta ?desde=YYYY-MM-DD"}), 400
+    try:
+        return jsonify(backfill_mav(desde, request.args.get("hasta")))
+    except ValueError as e:
+        return jsonify({"error": f"fecha inválida: {e}"}), 400
 
 
 def refrescar_ripte():

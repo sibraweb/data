@@ -60,6 +60,20 @@
   .pos { color: var(--green); font-weight: 600; }
   .neg { color: var(--red); font-weight: 600; }
   .ventana h3 { font-size: 15px; margin: 0 0 12px; color: var(--ink); border-bottom: 2px solid var(--red); padding-bottom: 6px; }
+
+  /* Tarjetas de tasas (Financiamiento) — pedido de Juan 2026-08-09: las tasas
+     vigentes siempre a la vista, en tarjetas; el histórico abajo, en gráfico. */
+  .tarjetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-bottom: 6px; }
+  .tarjeta { background: var(--white); border-radius: 8px; padding: 12px 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-left: 3px solid var(--red); }
+  .tarjeta .t-grupo { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--gray-700); }
+  .tarjeta .t-nombre { font-size: 13px; font-weight: 600; margin: 2px 0 6px; }
+  .tarjeta .t-valor { font-size: 26px; font-weight: 700; line-height: 1; }
+  .tarjeta .t-valor.sindato { font-size: 15px; font-weight: 500; color: var(--gray-700); }
+  .tarjeta .t-pie { font-size: 11px; color: var(--gray-700); margin-top: 6px; }
+  .tarjeta.vieja { border-left-color: var(--gray-300); }
+  .tarjeta.vieja .t-valor { color: var(--gray-700); }
+  .grupo-tarjetas { margin-bottom: 16px; }
+  .grupo-tarjetas > h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--gray-700); margin: 0 0 8px; }
 </style>
 </head>
 <body>
@@ -180,9 +194,44 @@ const VENTANAS = [
   { id: 'construccion', nombre: 'Construcción (APYMECO/CAMARCO)', familia: 'construccion', proyectable: true, esConstruccion: true },
   { id: 'salarios', nombre: 'Salarios (INDEC)', familia: 'salarios:INDICE_TOTAL', esSalarios: true },
   { id: 'alquiler', nombre: 'Alquiler CABA', familia: 'alquiler_caba:PROMEDIO', esAlquiler: true },
+  { id: 'financiamiento', nombre: 'Financiamiento', esFinanciamiento: true },
   { id: 'rem', nombre: 'Proyecciones (REM)', esRem: true },
   { id: 'obra', nombre: 'Cálculo de Obra', esObra: true },
 ];
+
+// Financiamiento (pedido de Juan, 2026-08-09): qué se puede graficar.
+// ⚠ Cheques en dólares NO figura porque NO EXISTE en MAV — la API contesta
+// "Datos no encontrados". No es que falte cargarlo.
+const FINANCIAMIENTO_SERIES = [
+  { value: 'caucion',      label: 'Caución (por plazo)' },
+  { value: 'cheques',      label: 'Cheques / echeqs — pesos' },
+  { value: 'pagares',      label: 'Pagarés — pesos' },
+  { value: 'pagares_usd',  label: 'Pagarés — dólares' },
+  { value: 'pagares_dl',   label: 'Pagarés — dólar linked' },
+  { value: 'bcra_colocar', label: 'BCRA — lo que se paga por colocar' },
+  { value: 'bcra_pedir',   label: 'BCRA — lo que cuesta pedir' },
+];
+
+// Las tasas del BCRA son series simples (una columna VALOR por serie), así que
+// se grafican pidiendo varias familias y juntándolas, no una serie ancha.
+const BCRA_GRUPOS = {
+  bcra_colocar: [['badlar', 'BADLAR'], ['baibar', 'BAIBAR'], ['tamar', 'TAMAR'],
+                 ['depositos_30d', 'Plazo fijo 30 días']],
+  // ⚠ TIM NO va acá: pese al nombre ("Tasa de Intereses Moratorios"), la serie
+  // del BCRA es un coeficiente acumulado base 1993 (hoy ~161.660), no una TNA.
+  // Se usa como el CER — dividir el coeficiente de una fecha por el de otra.
+  bcra_pedir:   [['adelantos_cta_cte', 'Adelantos en cta. cte.'],
+                 ['prestamos_personales', 'Préstamos personales']],
+};
+
+// familia -> columnas a graficar y cómo llamarlas
+const FINANCIAMIENTO_COLS = {
+  caucion:     ['caucion',  [['TASA_1D', '1 día'], ['TASA_7D', '7 días'], ['TASA_14D', '14 días'], ['TASA_30D', '30 días']]],
+  cheques:     ['cheques',  [['AVALADO_CORTO', 'Avalado'], ['GARANTIZADO_CORTO', 'Garantizado'], ['NO_GARANTIZADO_CORTO', 'No garantizado']]],
+  pagares:     ['pagares',  [['AVALADO_CORTO', 'Avalado'], ['GARANTIZADO_CORTO', 'Garantizado'], ['NO_GARANTIZADO_CORTO', 'No garantizado']]],
+  pagares_usd: ['pagares',  [['AVALADO_CORTO_USD', 'Avalado'], ['GARANTIZADO_CORTO_USD', 'Garantizado'], ['NO_GARANTIZADO_CORTO_USD', 'No garantizado']]],
+  pagares_dl:  ['pagares',  [['AVALADO_CORTO_DL', 'Avalado'], ['GARANTIZADO_CORTO_DL', 'Garantizado'], ['NO_GARANTIZADO_CORTO_DL', 'No garantizado']]],
+};
 
 const CATEGORIAS_UOCRA = [
   ['OFICIAL_ESPECIALIZADO', 'Oficial Especializado'],
@@ -433,12 +482,18 @@ function render() {
               ${crearSelect(`sel-alquilertipo-${v.id}`, ALQUILER_SERIES, 'label', 'value')}
             </div>
           ` : ''}
+          ${v.esFinanciamiento ? `
+            <div class="campo">
+              <label>Serie a graficar</label>
+              ${crearSelect(`sel-fin-${v.id}`, FINANCIAMIENTO_SERIES, 'label', 'value')}
+            </div>
+          ` : ''}
           ${v.esRem ? `
             <div class="campo">
               <label>Serie</label>
               ${crearSelect(`sel-rem-${v.id}`, REM_SERIES, 'label', 'value')}
             </div>
-          ` : `
+          ` : v.esFinanciamiento ? '' : `
             <div class="campo">
               <label>Ajustar por</label>
               ${crearSelect(`sel-ajuste-${v.id}`, INDICES_AJUSTE, 'label', 'value')}
@@ -454,12 +509,13 @@ function render() {
           ` : ''}
         </div>
         ${v.esAlquiler ? `<p class="estado" style="color:var(--red)">Fuente discontinuada (Buenos Aires Data) — no hay datos después de agosto 2019. Sirve como referencia histórica, no para decisiones con precios de hoy.</p>` : ''}
+        ${v.esFinanciamiento ? `<div id="fin-tarjetas-${v.id}"></div>` : ''}
         <div class="estado" id="estado-${v.id}"></div>
         <div class="chart-box"><canvas id="chart-${v.id}"></canvas></div>
         <div class="leyenda-tramos" id="leyenda-${v.id}" style="display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;font-size:12px;color:var(--ink)"></div>
         ${v.esRem ? `<div id="rem-extra-${v.id}"></div>` : ''}
         ${v.esUocra ? `<div id="uocra-vigentes"></div>` : ''}
-        ${!v.esRem ? `
+        ${(!v.esRem && !v.esFinanciamiento) ? `
           <h3 style="margin-top:20px">Calcular entre dos fechas</h3>
           <p class="estado" style="margin-top:0">Calcula sobre la MISMA serie que está graficada arriba (con el ajuste elegido). Si la serie es mensual y la fecha pedida cae en medio de un mes, se usa el último dato publicado en o antes de esa fecha (ej. IPC del 3 de abril = el dato de fin de marzo).</p>
           <div class="controles">
@@ -1121,6 +1177,73 @@ async function calcularVariacionVentana(v) {
   }
 }
 
+// Tarjetas de tasas vigentes (Financiamiento). La FECHA de cada bloque no es
+// decorativa: si el job de MAV no corre, la tarjeta mostraría un número viejo
+// como si fuera de hoy. Por eso se marca en gris lo que tiene más de 7 días.
+function pintarTarjetasFinanciamiento(id, data) {
+  const hoy = new Date();
+  const diasDesde = f => {
+    if (!f) return null;
+    return Math.round((hoy - new Date(f + 'T00:00:00')) / 86400000);
+  };
+  const fmt = v => (v === null || v === undefined) ? null : `${Number(v).toFixed(2)} %`;
+
+  const tarjeta = (grupo, nombre, tna, dias) => {
+    const vieja = dias === null || dias > 7;
+    const valor = fmt(tna);
+    const pie = dias === null ? 'sin dato'
+      : dias === 0 ? 'de hoy'
+      : dias === 1 ? 'de ayer'
+      : `hace ${dias} días`;
+    return `<div class="tarjeta${vieja ? ' vieja' : ''}">
+      <div class="t-grupo">${grupo}</div>
+      <div class="t-nombre">${nombre}</div>
+      <div class="t-valor${valor ? '' : ' sindato'}">${valor || 'sin dato'}</div>
+      <div class="t-pie">TNA · ${pie}</div>
+    </div>`;
+  };
+
+  // Cada tasa trae SU fecha: un día puede haber operado solo un plazo, y la
+  // tarjeta tiene que poder mostrar el último valor real de cada uno con su
+  // antigüedad, en vez de decir "sin dato" porque hoy no operó.
+  const bloques = [];
+  for (const [familia, titulo] of [['cheques', 'Cheques / echeqs'], ['pagares', 'Pagarés']]) {
+    const d = data[familia];
+    if (!d) continue;
+    const cards = (d.monedas || []).flatMap(m =>
+      m.tasas.map(t => tarjeta(`${titulo} · ${m.moneda}`, t.segmento, t.tna, diasDesde(t.fecha))));
+    if (cards.length) {
+      bloques.push(`<div class="grupo-tarjetas">
+        <h4>${titulo}</h4>
+        <div class="tarjetas">${cards.join('')}</div>
+      </div>`);
+    }
+  }
+  const c = data.caucion;
+  if (c) {
+    bloques.push(`<div class="grupo-tarjetas">
+      <h4>Caución en pesos</h4>
+      <div class="tarjetas">${(c.plazos || []).map(p =>
+        tarjeta('Caución', p.plazo, p.tna, diasDesde(p.fecha))).join('')}</div>
+    </div>`);
+  }
+  if (data.bcra?.tasas?.length) {
+    bloques.push(`<div class="grupo-tarjetas">
+      <h4>Tasas del BCRA</h4>
+      <div class="tarjetas">${data.bcra.tasas.map(t =>
+        tarjeta('BCRA', t.nombre, t.tna, diasDesde(t.fecha))).join('')}</div>
+    </div>`);
+  }
+
+  bloques.push(`<p class="estado">⚠ <b>Cheques en dólares no figura porque no existe en MAV</b>
+    (la API responde "datos no encontrados"), no porque falte cargarlo. Los pagarés
+    sí cotizan en dólares y en dólar linked.<br>
+    El histórico de caución hasta el 06/08/2026 sale de las <b>cauciones propias</b>
+    (la tasa que se pagó de verdad), no de la referencia de BYMA.</p>`);
+
+  document.getElementById(`fin-tarjetas-${id}`).innerHTML = bloques.join('');
+}
+
 async function cargarVentana(v) {
   const estadoEl = document.getElementById(`estado-${v.id}`);
   estadoEl.textContent = 'Cargando…';
@@ -1136,6 +1259,63 @@ async function cargarVentana(v) {
       estadoEl.textContent = 'Actualizado';
     } catch (err) {
       estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
+      estadoEl.classList.add('error');
+    }
+    return;
+  }
+
+  if (v.esFinanciamiento) {
+    // Dos cosas independientes: las TARJETAS con la tasa vigente de todo
+    // (siempre visibles, pedido de Juan) y el GRÁFICO de la serie elegida.
+    // Si una falla, la otra tiene que seguir andando.
+    try {
+      const r = await fetch(`${API}/api/financiamiento`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      pintarTarjetasFinanciamiento(v.id, await r.json());
+    } catch (err) {
+      document.getElementById(`fin-tarjetas-${v.id}`).innerHTML =
+        `<p class="estado error">No se pudieron traer las tasas vigentes (${API}).</p>`;
+    }
+    try {
+      const clave = document.getElementById(`sel-fin-${v.id}`).value;
+      let series;
+      if (BCRA_GRUPOS[clave]) {
+        // Series simples: una llamada por familia, columna VALOR.
+        series = (await Promise.all(BCRA_GRUPOS[clave].map(async ([familia, label]) => {
+          const r = await fetch(`${API}/api/series/${familia}`);
+          if (!r.ok) return null;
+          const recs = await r.json();
+          return {
+            label,
+            puntos: recs
+              .filter(x => x.VALOR !== null && x.VALOR !== undefined && x.VALOR !== '')
+              .map(x => ({ fecha: x.FECHA, valor: Number(x.VALOR) }))
+              .sort((a, b) => a.fecha.localeCompare(b.fecha)),
+          };
+        }))).filter(s => s && s.puntos.length);
+      } else {
+        const [familia, cols] = FINANCIAMIENTO_COLS[clave];
+        const r = await fetch(`${API}/api/series/${familia}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const recs = await r.json();
+        series = cols.map(([col, label]) => ({
+          label,
+          puntos: recs
+            .filter(x => x[col] !== null && x[col] !== undefined && x[col] !== '')
+            .map(x => ({ fecha: x.FECHA, valor: Number(x[col]) }))
+            .sort((a, b) => a.fecha.localeCompare(b.fecha)),
+        })).filter(s => s.puntos.length);
+      }
+      const conDatos = series.filter(s => s.puntos.length > 1);
+      dibujar(v.id, series.map(s => ({ ...s, puntos: filtrarPorRango(s.puntos, rango) })));
+      const total = series.reduce((n, s) => n + s.puntos.length, 0);
+      estadoEl.textContent = !total
+        ? 'Todavía no hay histórico de esta serie. Se acumula un dato por día hábil mientras el server de índices esté prendido.'
+        : conDatos.length
+          ? `${total} datos · ${series[0].puntos[0].fecha} a ${series[0].puntos.at(-1).fecha} · TNA %`
+          : `${total} dato(s) — hace falta más de uno para que el gráfico muestre algo.`;
+    } catch (err) {
+      estadoEl.textContent = `No se pudo traer el histórico (${API}). ¿Está corriendo api/server.py?`;
       estadoEl.classList.add('error');
     }
     return;
@@ -1393,6 +1573,9 @@ async function init() {
   });
   document.querySelectorAll('select[id^="sel-rem-"]').forEach(sel => {
     sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-rem-${v.id}` === sel.id)));
+  });
+  document.querySelectorAll('select[id^="sel-fin-"]').forEach(sel => {
+    sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-fin-${v.id}` === sel.id)));
   });
   document.querySelectorAll('select[id^="sel-item-"]').forEach(sel => {
     sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-item-${v.id}` === sel.id)));

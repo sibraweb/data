@@ -1,8 +1,23 @@
 """
 Acceso a Google Sheets para el módulo indices.
 
-Mismo patrón que sibra-obra-repo/api/server.py: OAuth desktop
-(credentials.json + token.pickle) + caché en memoria TTL 90s.
+Mismo patrón que sibra-obra-repo/api/server.py, ahora en los DOS caminos:
+
+  1) SERVICE ACCOUNT (api/service_account.json) — preferido. No vence nunca y
+     no necesita navegador. Es lo que permite que este módulo corra en un
+     server sin nadie adelante (Oracle).
+  2) OAuth de usuario (credentials.json + token.pickle) — fallback.
+
+📝 **Agregado el 2026-08-09.** Hasta hoy acá SOLO existía el camino 2, aunque
+Obra ya prefería el 1 desde antes. Consecuencia concreta: `token.pickle` de
+índices **no existe**, así que cada vez que hacía falta Sheets el módulo
+intentaba abrir un navegador — cosa que en un server no puede pasar, y que en
+la PC significaba que alguien tenía que estar mirando.
+
+Y para lo que índices usa Sheets alcanza de sobra con una cuenta de servicio:
+lee la pestaña COTIZACIONES del Sheet de precios de Obra y escribe
+MATERIALES_HISTORICO / UOCRA_ADICIONALES en el suyo. Todo eso es
+Sheets + Drive, que es justo lo que una service account sí puede hacer.
 """
 
 import os
@@ -13,6 +28,7 @@ from pathlib import Path
 import google.auth.exceptions
 import gspread
 from google.auth.transport.requests import Request
+from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
@@ -42,6 +58,10 @@ RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 
 TOKEN_FILE = RUNTIME_DIR / "token.pickle"
 CREDS_FILE = BASE_DIR / "credentials.json"
+# Cuenta de servicio: el camino que no vence. Si el archivo existe, gana.
+# Hay que compartirle los Sheets con su email, igual que a una persona.
+SERVICE_ACCOUNT_FILE = Path(os.environ.get(
+    "GOOGLE_SERVICE_ACCOUNT_FILE", str(BASE_DIR / "service_account.json")))
 
 INDICES_SHEET_ID = os.environ.get("INDICES_SHEET_ID", "")
 PUBLIC_SHEET_ID = os.environ.get("PUBLIC_SHEET_ID", "")
@@ -71,6 +91,14 @@ def cache_bust(*prefixes: str):
 
 
 def get_credentials():
+    """Service account si está; si no, el flujo OAuth de usuario de siempre."""
+    if SERVICE_ACCOUNT_FILE.exists():
+        return ServiceAccountCredentials.from_service_account_file(
+            str(SERVICE_ACCOUNT_FILE), scopes=SCOPES)
+    return _get_oauth_user_credentials()
+
+
+def _get_oauth_user_credentials():
     creds = None
     if TOKEN_FILE.exists():
         with open(TOKEN_FILE, "rb") as f:
@@ -93,6 +121,17 @@ def get_credentials():
                     "Falta api/credentials.json — descargar el OAuth client "
                     "desktop de Google Cloud Console (mismo proyecto que Obra)."
                 )
+            # 🔴 2026-08-09: mismo arreglo que en Obra. `run_local_server()`
+            # abre un navegador y espera; en un server sin pantalla el request
+            # se cuelga para siempre, sin error ni log. Falla rápido y dice
+            # qué hacer. Para autorizar a mano: SIBRA_OAUTH_INTERACTIVO=1.
+            if os.environ.get("SIBRA_OAUTH_INTERACTIVO", "").lower() not in ("1", "true", "si"):
+                raise RuntimeError(
+                    "Google pide autorización y este proceso no puede abrir un "
+                    "navegador. Lo que corresponde acá es poner "
+                    "`api/service_account.json` (no vence nunca) y compartirle "
+                    "los Sheets con el mail de esa cuenta.\n"
+                    f"Alternativa: copiar un token.pickle válido a {TOKEN_FILE}.")
             flow = InstalledAppFlow.from_client_secrets_file(str(CREDS_FILE), SCOPES)
             creds = flow.run_local_server(port=0)
         with open(TOKEN_FILE, "wb") as f:
