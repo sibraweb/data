@@ -89,7 +89,7 @@
 </main>
 
 <script>
-const API = 'http://localhost:8100';
+const API = (window.SIBRA_API_INDICES ?? (location.pathname.startsWith('/indices') ? '/indices' : ''));
 
 const RANGOS = [
   { value: 'todo', label: 'Todo' },

@@ -1175,11 +1175,41 @@ def uso_supabase():
         return jsonify({"error": str(e)}), 500
 
 
+def schedulers_propios_activos():
+    """¿Este proceso tiene que correr su propio scheduler?
+
+    📝 **2026-08-11.** Hasta hoy Índices arrancaba SIEMPRE con 15 jobs adentro
+    del proceso (dólar c/4h, BCRA c/6h, caución c/4h, REM semanal…). Eso hacía
+    que "prender el server" y "poner a correr 15 trabajos" fueran la misma
+    acción, sin forma de separarlas.
+
+    ⚠ Y se pisaba con la consola: los 15 jobs `indices_*` del cronograma
+    (`SIBRA_SERVER/panel`) le pegan a `POST /api/refrescar/<fuente>` — el mismo
+    trabajo, por otro camino. Con los dos prendidos, cada fuente se refresca
+    dos veces.
+
+    Criterio de Juan (2026-08-11): el servidor sirve datos; **qué corre y
+    cuándo lo decide la consola**, así no está corriendo todo el tiempo todo.
+
+        SIBRA_SCHEDULERS=on   los corre este proceso (la PC, sin consola)
+        (sin la variable)     NO los corre — manda el cronograma
+
+    Por eso el default es NO: en Oracle es lo que corresponde, y si alguien
+    levanta el server a mano tampoco dispara 15 trabajos sin querer.
+    """
+    return os.environ.get("SIBRA_SCHEDULERS", "").strip().lower() in ("1", "on", "true", "si")
+
+
 if __name__ == "__main__":
     import threading
     port = int(os.environ.get("FLASK_PORT", 8100))
-    # La sincronización inicial va en segundo plano: el server queda disponible
-    # al instante y los datos van entrando mientras tanto.
-    threading.Thread(target=iniciar_scheduler, daemon=True).start()
-    print(f"[server] escuchando en http://0.0.0.0:{port} (sincronizando en segundo plano…)")
+    if schedulers_propios_activos():
+        # La sincronización inicial va en segundo plano: el server queda
+        # disponible al instante y los datos van entrando mientras tanto.
+        threading.Thread(target=iniciar_scheduler, daemon=True).start()
+        print("[server] schedulers PROPIOS activos (SIBRA_SCHEDULERS=on)")
+    else:
+        print("[server] schedulers propios APAGADOS — los dispara la consola "
+              "(panel 8400). Para correrlos acá: SIBRA_SCHEDULERS=on")
+    print(f"[server] escuchando en http://0.0.0.0:{port}")
     app.run(host="0.0.0.0", port=port, debug=False)
