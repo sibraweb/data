@@ -56,7 +56,24 @@ RUNTIME_DIR = Path(os.environ.get("SIBRA_INDICES_RUNTIME",
                                   str(Path(os.environ.get("SIBRA_RUNTIME", r"C:\SIBRA")) / "indices")))
 RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 
-TOKEN_FILE = RUNTIME_DIR / "token.pickle"
+def _token_google():
+    """Mismo token que Obra y Brokers: los tres usan la MISMA app de Google
+    (client_id 891275909999…), así que tener un token por módulo solo servía
+    para tener que re-autorizar tres veces (Juan, 2026-08-13). Lo escribe
+    `sibra-obra-repo/api/reauth_google.py`.
+
+    Si el compartido todavía no existe se usa el propio, para no dejar sin
+    Sheets a una PC que no corrió el reauth nuevo."""
+    compartido = Path(os.environ.get(
+        "SIBRA_GOOGLE_TOKEN",
+        str(Path(os.environ.get("SIBRA_RUNTIME", r"C:\SIBRA")) / "google" / "token.pickle")))
+    propio = RUNTIME_DIR / "token.pickle"
+    if compartido.exists() or not propio.exists():
+        return compartido
+    return propio
+
+
+TOKEN_FILE = _token_google()
 CREDS_FILE = BASE_DIR / "credentials.json"
 # Cuenta de servicio: el camino que no vence. Si el archivo existe, gana.
 # Hay que compartirle los Sheets con su email, igual que a una persona.
