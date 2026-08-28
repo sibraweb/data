@@ -288,6 +288,102 @@ def get_caucion():
     return jsonify(records)
 
 
+# ══ FINANCIAMIENTO — tasas en vivo, de BYMA y del MAV ═══════════════════════
+# Juan, 2026-08-27: *«financiamiento va en Índices me parece»*.
+#
+# Tenía razón. Estas rutas vivían en el servicio 8300 y, al fusionarlo, pasaron
+# un rato por el ERP — donde no van: el ERP registra lo que pasó con NUESTRA
+# plata, y esto son precios de mercado, que es exactamente el dominio de
+# Índices. Acá ya se refrescan cauciones (`refrescar_caucion`), MAV
+# (`refrescar_mav`) y las series del BCRA.
+#
+# ⚠ QUEDA UNA DUPLICACIÓN ABIERTA, y conviene tenerla escrita: estas rutas
+# consultan BYMA y el MAV EN VIVO, mientras `refrescar_*` guarda ese mismo dato
+# en `mercado_curva_cauciones` y `mercado_tasas_mav`. Son dos caminos a lo
+# mismo, y pueden dar distinto según cuándo corrió el scheduler. Lo correcto es
+# que estas lean de las tablas y el vivo quede solo para el refresco — pero eso
+# cambia lo que devuelven y no se hace de paso: queda anotado, no resuelto.
+_FIN_DIR = Path(__file__).parent.parent.parent / "Vinculacion bancos" / "servicio"
+if str(_FIN_DIR) not in sys.path:
+    sys.path.insert(0, str(_FIN_DIR))
+
+
+def _fin(fn):
+    """Importa `financiamiento` recién al usarlo: ese módulo sale a la red, y
+    arriba haría que Índices entero no arranque si BYMA o el MAV están caídos."""
+    import importlib
+    return getattr(importlib.import_module("financiamiento"), fn)
+
+
+@app.route("/api/financiamiento/cauciones")
+def fin_cauciones():
+    """Curva de cauciones en pesos, en vivo desde BYMA (cache 5 min).
+    ?plazo=7 devuelve solo la más cercana a ese plazo."""
+    try:
+        plazo = request.args.get("plazo", type=int)
+        if plazo:
+            return jsonify(_fin("caucion_a")(plazo) or {"error": "sin datos de BYMA ahora"})
+        curva = _fin("curva_cauciones")()
+        return jsonify(curva if curva is not None else {"error": "sin datos de BYMA ahora"})
+    except Exception as e:
+        return jsonify({"error": "financiamiento no disponible: %s" % str(e)[:120]}), 503
+
+
+@app.route("/api/financiamiento/cauciones/texto")
+def fin_cauciones_texto():
+    """Texto listo para el bot de avisos (botón sin IA)."""
+    try:
+        return jsonify({"texto": _fin("texto_cauciones")()})
+    except Exception as e:
+        return jsonify({"error": str(e)[:120]}), 503
+
+
+@app.route("/api/financiamiento/cauciones-mav")
+def fin_cauciones_mav():
+    """Plaza de caución del MAV: promedio/min/max/última + TEA + operaciones
+    por plazo — más rica que el feed libre de BYMA."""
+    try:
+        d = _fin("curva_cauciones_mav")(request.args.get("moneda", "pesos"))
+        return jsonify(d if d is not None else {"error": "sin datos de MAV ahora"})
+    except Exception as e:
+        return jsonify({"error": str(e)[:120]}), 503
+
+
+@app.route("/api/financiamiento/bcra")
+def fin_bcra():
+    """Tasas de referencia bancarias (BCRA v4.0): plazo fijo 30d, BADLAR,
+    TAMAR, adelantos, personales, política monetaria."""
+    try:
+        d = _fin("tasas_bcra")()
+        return jsonify(d if d else {"error": "BCRA no responde ahora"})
+    except Exception as e:
+        return jsonify({"error": str(e)[:120]}), 503
+
+
+@app.route("/api/financiamiento/texto")
+def fin_texto():
+    """Panorama completo (cauciones BYMA+MAV, cheques, pagarés, BCRA)."""
+    try:
+        return jsonify({"texto": _fin("texto_financiamiento")()})
+    except Exception as e:
+        return jsonify({"error": str(e)[:120]}), 503
+
+
+# ⚠ ÚLTIMA de las de financiamiento: `<instrumento>` es comodín y se comería
+# `/cauciones`, `/bcra` y `/texto` si se registrara antes.
+@app.route("/api/financiamiento/<instrumento>")
+def fin_instrumento(instrumento):
+    """Tasas por plazo y segmento desde el MAV: cheques | pagares | fce.
+    ?moneda=$ (default) o dol."""
+    if instrumento not in ("cheques", "pagares", "fce"):
+        return jsonify({"error": "instrumento debe ser cheques, pagares o fce"}), 404
+    try:
+        d = _fin("tasas_instrumento")(instrumento, request.args.get("moneda", "$"))
+        return jsonify(d if d is not None else {"error": "sin datos de MAV ahora"})
+    except Exception as e:
+        return jsonify({"error": str(e)[:120]}), 503
+
+
 @app.route("/api/series/cheques")
 def get_cheques():
     return jsonify(_leer("CHEQUES"))
