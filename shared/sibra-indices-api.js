@@ -139,6 +139,64 @@ const SbIndices = (() => {
     return filas.length ? { fecha: filas[0].fecha, valor: Number(filas[0].valor) } : null;
   }
 
+  // ── Materiales (espejo de server.py:_cotizaciones_material) ─────────────
+  // Desde el 06/09 esto es UNA sola tabla: `cotizaciones` de Obra, con el
+  // histórico viejo adentro. Antes se ensamblaba con la Sheet del Drive, que
+  // un estático no puede leer — por eso esta pestaña era la única que no
+  // andaba en la página publicada.
+  const MATERIALES_CURADOS = {
+    '23': ['CEMENTO PORTLAND X 25 KG. (LOMA NEGRA)-25',
+           'HIERRO Aº TORS.Ø 10-BR X 12MT.',
+           'LADRILLO HUECO DE 1º 18X18X25-5'],
+  };
+  const PROVEEDORES_NO_MATERIALES = new Set(['209']);   // UOCRA es ficticio
+  const INDICES_MATERIALES = {
+    hierro: ['23', 'HIERRO Aº TORS.Ø 10-BR X 12MT.'],
+    cemento: ['23', 'CEMENTO PORTLAND X 25 KG. (LOMA NEGRA)-25'],
+    ladrillo: ['23', 'LADRILLO HUECO DE 1º 18X18X25-5'],
+  };
+
+  function leerCotizaciones(idProveedor) {
+    return conCache('cot:' + idProveedor, async () => {
+      const filas = await SibraSB.selectAll(
+        `cotizaciones?select=descripcion,fecha,precio&id_proveedor=eq.${encodeURIComponent(idProveedor)}` +
+        `&fecha=neq.&precio=neq.&order=fecha.asc`);
+      const out = [];
+      for (const f of filas) {
+        // Las columnas son `text` (la tabla viene de una planilla): un precio
+        // que no es número se descarta, no se toma como cero.
+        const precio = Number(String(f.precio).replace(',', '.'));
+        if (!Number.isFinite(precio)) continue;
+        out.push({ ID_PROVEEDOR: idProveedor, DESCRIPCION: f.descripcion,
+                   FECHA: String(f.fecha).slice(0, 10), PRECIO: precio });
+      }
+      return out;
+    });
+  }
+
+  // {id: nombre} de los que tienen precios. Se le pregunta a la tabla por el
+  // mismo motivo que en el server: la lista escrita a mano se desincronizó de
+  // los ids de Obra y la pestaña quedó pidiendo proveedores inexistentes.
+  function proveedoresMateriales() {
+    return conCache('cot:proveedores', async () => {
+      const filas = await SibraSB.selectAll(
+        'cotizaciones?select=id_proveedor,proveedor&id_proveedor=neq.');
+      const nombres = new Map(), cuenta = new Map();
+      for (const f of filas) {
+        if (PROVEEDORES_NO_MATERIALES.has(f.id_proveedor)) continue;
+        if (f.proveedor) nombres.set(f.id_proveedor, f.proveedor);
+        cuenta.set(f.id_proveedor, (cuenta.get(f.id_proveedor) || 0) + 1);
+      }
+      const orden = [...cuenta.keys()].sort((a, b) => cuenta.get(b) - cuenta.get(a));
+      return Object.fromEntries(orden.map(id => [id, nombres.get(id) || id]));
+    });
+  }
+
+  async function cotizacionesMaterial(idProveedor, descripcion) {
+    const filas = await leerCotizaciones(idProveedor);
+    return descripcion ? filas.filter(r => r.DESCRIPCION === descripcion) : filas;
+  }
+
   function leerRem(tipo) {
     return conCache('rem:' + tipo, async () => {
       const filas = await SibraSB.selectAll(
@@ -173,7 +231,7 @@ const SbIndices = (() => {
     return salida;
   }
 
-  async function resolverFamilia(familia) {
+  async function resolverFamilia(familia, item) {
     if (familia === 'ipc_nivel') {
       const pcts = await leer('INFLACION_INDEC');
       return { records: construirIndiceNivel(pcts, 'FECHA', 'VALOR'), fechaCol: 'FECHA', valorCol: 'VALOR' };
@@ -194,7 +252,9 @@ const SbIndices = (() => {
         if (!col) return null;
         return { records: await leer(DOLAR_TAB), fechaCol: 'FECHA', valorCol: col };
       }
-      if (tipo === 'mat') return 'MATERIALES';
+      if (tipo === 'mat') {
+        return { records: await cotizacionesMaterial(sub, item), fechaCol: 'FECHA', valorCol: 'PRECIO' };
+      }
     }
     return null;
   }
@@ -220,7 +280,10 @@ const SbIndices = (() => {
     }
     if (nombre === 'ipc') return resolverFamilia('ipc_nivel');
     if (DOLAR_COLUMNAS[nombre]) return { records: await leer(DOLAR_TAB), fechaCol: 'FECHA', valorCol: DOLAR_COLUMNAS[nombre] };
-    if (['hierro', 'cemento', 'ladrillo'].includes(nombre)) return 'MATERIALES';
+    if (INDICES_MATERIALES[nombre]) {
+      const [idProv, descripcion] = INDICES_MATERIALES[nombre];
+      return { records: await cotizacionesMaterial(idProv, descripcion), fechaCol: 'FECHA', valorCol: 'PRECIO' };
+    }
     return resolverFamilia(nombre);
   }
 
@@ -498,9 +561,6 @@ const SbIndices = (() => {
   const ok = cuerpo => ({ ok: true, status: 200, json: async () => cuerpo });
   const err = (status, mensaje) => ({ ok: false, status, json: async () => ({ error: mensaje }) });
 
-  const SIN_BACKEND = 'Esta pestaña necesita api/server.py: las cotizaciones vivas salen de ' +
-                      'la Sheet de Obra (Google), que un sitio estático no puede leer.';
-
   async function get(ruta) {
     const [camino, qs] = ruta.split('?');
     const q = new URLSearchParams(qs || '');
@@ -540,14 +600,12 @@ const SbIndices = (() => {
 
     if (camino === '/api/ajustar') {
       const familia = q.get('familia') || '', indice = q.get('indice') || 'ninguno';
-      const base = await resolverFamilia(familia);
-      if (base === 'MATERIALES') return err(501, SIN_BACKEND);
+      const base = await resolverFamilia(familia, q.get('item'));
       if (!base) return err(404, `familia desconocida: ${familia}`);
       if (indice === 'ninguno') {
         return ok(ajustar(base.records, null, base.fechaCol, base.valorCol, null, null, 'nominal'));
       }
       const idx = await serieIndice(indice);
-      if (idx === 'MATERIALES') return err(501, SIN_BACKEND);
       if (!idx) return err(404, `índice desconocido: ${indice}`);
       return ok(ajustar(base.records, idx.records, base.fechaCol, base.valorCol, idx.fechaCol, idx.valorCol, 'ratio'));
     }
@@ -571,13 +629,11 @@ const SbIndices = (() => {
         return r ? ok(r) : err(422, 'no hay datos suficientes en ese rango');
       }
 
-      const base = await resolverFamilia(familia);
-      if (base === 'MATERIALES') return err(501, SIN_BACKEND);
+      const base = await resolverFamilia(familia, q.get('item'));
       if (!base) return err(404, `familia desconocida: ${familia}`);
       let serie = aSerie(base.records, base.fechaCol, base.valorCol);
       if (indice && indice !== 'ninguno') {
         const idx = await serieIndice(indice);
-        if (idx === 'MATERIALES') return err(501, SIN_BACKEND);
         if (!idx) return err(404, `índice desconocido: ${indice}`);
         serie = ajustar(base.records, idx.records, base.fechaCol, base.valorCol, idx.fechaCol, idx.valorCol, 'ratio')
           .map(p => ({ fecha: p.fecha, valor: p.valor }));
@@ -623,7 +679,23 @@ const SbIndices = (() => {
       return ok({ modelo, proyeccion: proyectar(modelo, curvaIpc, curvaFx) });
     }
 
-    if (partes[0] === 'materiales') return err(501, SIN_BACKEND);
+    if (partes[0] === 'materiales') {
+      if (partes[1] === 'proveedores') return ok(await proveedoresMateriales());
+      const idProv = decodeURIComponent(partes[1] || '');
+      const proveedores = await proveedoresMateriales();
+      if (!(idProv in proveedores)) return err(404, 'proveedor no reconocido o sin precios cargados');
+      const registros = await cotizacionesMaterial(idProv);
+      if (partes[2] !== 'items') return ok(registros);
+      const conteo = new Map();
+      for (const r of registros) {
+        if (!r.DESCRIPCION) continue;
+        conteo.set(r.DESCRIPCION, (conteo.get(r.DESCRIPCION) || 0) + 1);
+      }
+      const curados = MATERIALES_CURADOS[idProv];
+      return ok(curados
+        ? curados.map(d => ({ descripcion: d, cotizaciones: conteo.get(d) || 0 }))
+        : [...conteo.keys()].sort().map(d => ({ descripcion: d, cotizaciones: conteo.get(d) })));
+    }
 
     // /api/estado-sync y /api/uso-supabase son cosas del server local: no
     // existen acá y la página ya los trata como opcionales.

@@ -57,5 +57,6 @@ curva.
   se prueba entrando a la página publicada. Lo verificado del login es que el
   modal aparece, que la petición llega a Supabase Auth y que una credencial
   equivocada muestra "Invalid login credentials" sin dejar la pantalla colgada.
-- La pestaña **Materiales**, que no funciona sin `api/server.py` por diseño:
-  las cotizaciones vivas salen de la Sheet de Obra vía OAuth de Google.
+- La pestaña **Materiales**. Desde el 06/09 tambien sale de la base (una sola
+  tabla, `cotizaciones`), asi que anda en la publicada — pero su lectura, como
+  el resto del camino contra Supabase, se prueba entrando.

@@ -319,6 +319,69 @@ def leer_materiales_historico(id_proveedor: str) -> list[dict]:
     return resultado
 
 
+def leer_cotizaciones(id_proveedor: str) -> list[dict]:
+    """UNA lista de precios por proveedor, de `cotizaciones` — la tabla del
+    módulo de insumos de Obra, que desde 2026-09-06 tiene también el histórico
+    viejo adentro (origen='HISTORICO', ver
+    unificar_materiales_en_cotizaciones.py).
+
+    Antes esto se ARMABA: la Sheet de Obra por un lado y nuestro histórico por
+    el otro. Se rompió sin hacer ruido cuando Obra migró a Postgres y renumeró
+    los proveedores. Una sola fuente no se puede desempalmar.
+
+    Las columnas de `cotizaciones` son todas `text` (viene de una planilla), así
+    que el precio se convierte acá y las filas sin número se descartan: un
+    precio vacío no es un precio de cero."""
+    key = f"cotizaciones:{id_proveedor}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+    with _conectar() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT descripcion, fecha, precio FROM cotizaciones "
+                "WHERE id_proveedor = %s AND fecha <> '' AND precio <> '' "
+                "ORDER BY fecha",
+                (id_proveedor,),
+            )
+            rows = cur.fetchall()
+    resultado = []
+    for r in rows:
+        try:
+            precio = float(str(r["precio"]).replace(",", "."))
+        except (TypeError, ValueError):
+            continue
+        resultado.append({"ID_PROVEEDOR": id_proveedor, "DESCRIPCION": r["descripcion"],
+                          "FECHA": str(r["fecha"])[:10], "PRECIO": precio})
+    _cache_set(key, resultado)
+    return resultado
+
+
+def proveedores_con_cotizaciones() -> dict:
+    """{id: nombre} de los que TIENEN precios cargados, salido de la tabla.
+
+    Esta lista estaba escrita a mano y con los ids viejos (43, 12, 64, 229)
+    mientras los datos usaban los de Obra (23, 206, 122, 312): la pantalla
+    pedía proveedores que no existían y no devolvía un solo precio, sin avisar.
+    Preguntándole a la base eso no puede volver a pasar, y un proveedor nuevo
+    aparece solo."""
+    key = "cotizaciones:proveedores"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+    with _conectar() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id_proveedor, max(proveedor) AS nombre, count(*) AS n "
+                "FROM cotizaciones WHERE id_proveedor <> '' "
+                "GROUP BY id_proveedor ORDER BY n DESC"
+            )
+            rows = cur.fetchall()
+    resultado = {r["id_proveedor"]: (r["nombre"] or r["id_proveedor"]) for r in rows}
+    _cache_set(key, resultado)
+    return resultado
+
+
 def upsert_materiales_historico_bulk(registros: list[dict]) -> int:
     tuplas = []
     for r in registros:

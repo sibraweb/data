@@ -17,10 +17,9 @@
 //  clave de sesión en localStorage: como /market/ y /data/ son el mismo
 //  origen, quien ya entró en Market Suite entra acá sin volver a loguearse.
 //
-//  LO QUE NO PUEDE: la pestaña Materiales. Las cotizaciones vivas salen de la
-//  Sheet COTIZACIONES del Drive de Obra (server.py:535) y eso necesita OAuth
-//  de Google — un estático no lo puede leer. Esa pestaña avisa y se queda
-//  quieta; el resto anda igual que en local.
+//  Andan las once pestañas. Materiales era la excepción —sus precios salían de
+//  la Sheet del Drive de Obra, por OAuth de Google— hasta que el 06/09 se
+//  unificó todo en la tabla `cotizaciones`: ahora también sale de la base.
 // ═══════════════════════════════════════════════════════════════════════════
 const SibraSB = (() => {
   const SUPABASE_URL = 'https://mkbeddulfbqgyutrzyvr.supabase.co';

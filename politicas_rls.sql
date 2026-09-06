@@ -34,5 +34,14 @@ create policy rem_forecast_auth_read on public.rem_forecast
   for select to authenticated using (true);
 
 -- `uocra_adicionales` y `materiales_cotizaciones` quedan cerradas: no las lee
--- el navegador (Materiales necesita la Sheet de Obra, que sale por OAuth desde
--- api/server.py). Abrirlas cuando algo del front las precise, no antes.
+-- el navegador. La segunda ademas dejo de usarse el 06/09 — su contenido vive
+-- ahora dentro de `cotizaciones` (unificar_materiales_en_cotizaciones.py) y la
+-- tabla queda solo de respaldo. Abrirlas cuando algo del front las precise.
+
+-- 2026-09-06 — Materiales unificado. La pestana pasa a leer `cotizaciones`
+-- (la tabla del modulo de insumos de Obra, que ahora tiene tambien el
+-- historico viejo adentro). Sin esto, Materiales seguia siendo la unica
+-- pestana que no podia andar en la pagina publicada.
+drop policy if exists cotizaciones_auth_read on public.cotizaciones;
+create policy cotizaciones_auth_read on public.cotizaciones
+  for select to authenticated using (true);

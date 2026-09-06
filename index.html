@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sibratech · Índices</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-<script src="shared/sibra-sb.js?v=2"></script>
-<script src="shared/sibra-indices-api.js?v=3"></script>
+<script src="shared/sibra-sb.js?v=3"></script>
+<script src="shared/sibra-indices-api.js?v=4"></script>
 <style>
   :root {
     --red: #E10600;
@@ -121,10 +121,6 @@ function pedir(ruta) {
 // que se prenda api/server.py no sirve de nada en la página publicada.
 function msgFalla(err) {
   if (!MODO_SB) return `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
-  if (String(err?.message || '').includes('501')) {
-    return 'Esta pestaña necesita api/server.py: las cotizaciones vivas salen de la Sheet de ' +
-           'Obra (Google), y un sitio estático no puede leerla. Abrila desde el server local.';
-  }
   return `No se pudieron traer los datos de la base${err?.message ? ` (${err.message})` : ''}.`;
 }
 

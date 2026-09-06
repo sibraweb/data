@@ -191,18 +191,14 @@ RESUMEN_SERIES = [
     ("Caución 30 días", "caucion:TASA_30D"),
 ]
 
-# Proveedores de materiales ya cargados en Obra vía el pipeline de Gmail
-# (ver sibra-obra-repo/api/PARSERS_LOG.md). Che Camba y Electropunto quedan
-# pendientes hasta tener su parser configurado en Obra.
-PROVEEDORES_MATERIALES = {
-    "43": "Cerámica Norte",
-    "12": "Construcciones en Seco",
-    "64": "SERINAR",
-    "229": "Electro Punto",  # confirmado en ENTIDADES: ID 229 = ELECTRO PUNTO SRL (razón social GAIPI SRL);
-                             # ya tiene 3 vínculos cargados en MAESTRO_VINCULOS (cables, caño rígido)
-}
-# Che Camba = ID 51 en ENTIDADES (CHECAMBA MATERIALES SRL) — todavía sin
-# cotizaciones/vínculos cargados, agregar acá cuando tenga datos.
+# Los proveedores de materiales ya NO se escriben acá: se le preguntan a la
+# tabla `cotizaciones` (ver _proveedores_materiales más abajo).
+#
+# Esta lista existía a mano —"43": Cerámica Norte, "12", "64", "229"— y era la
+# numeración vieja. Obra renumeró (Cerámica Norte es 23) y esto quedó pidiendo
+# proveedores inexistentes: la pestaña Materiales devolvía CERO precios y no lo
+# decía. Una lista escrita a mano contra ids de otro módulo se desincroniza y
+# no avisa; preguntándole a la base, un proveedor nuevo aparece solo.
 
 REM_TABS = {"ipc": "REM_IPC", "fx": "REM_FX"}
 REM_HEADERS = ["CLAVE", "FECHA_PRONOSTICO", "PERIODO", "MEDIANA", "PROMEDIO",
@@ -513,50 +509,58 @@ def get_financiamiento():
 # antes. Se completa a pedido de Juan a medida que define qué necesita de
 # cada proveedor.
 MATERIALES_CURADOS = {
-    "43": [  # Cerámica Norte
+    "23": [  # Cerámica Norte
         "CEMENTO PORTLAND X 25 KG. (LOMA NEGRA)-25",
         "HIERRO Aº TORS.Ø 10-BR X 12MT.",
         "LADRILLO HUECO DE 1º 18X18X25-5",
     ],
-    # "64": [...]  # SERINAR — caño Awaduct 110mm x 4mts pedido por Juan,
-    #                todavía no aparece en ninguna cotización cargada (solo
-    #                hay accesorios de 50/63mm) — pendiente hasta que llegue
-    #                un mail con ese ítem.
+    # "122": [...]  # SERINAR — caño Awaduct 110mm x 4mts pedido por Juan,
+    #                 todavía no aparece en ninguna cotización cargada (solo
+    #                 hay accesorios de 50/63mm) — pendiente hasta que llegue
+    #                 un mail con ese ítem.
 }
+
+# El "proveedor" UOCRA es ficticio: lo usa Obra para meter la mano de obra en
+# el mismo circuito de precios. En Materiales no va — la mano de obra tiene su
+# propia ventana, con los básicos del convenio.
+PROVEEDORES_NO_MATERIALES = {"209"}
+
+
+def _proveedores_materiales() -> dict:
+    """{id: nombre} de los proveedores con precios cargados, menos los que no
+    son materiales."""
+    return {k: v for k, v in db.proveedores_con_cotizaciones().items()
+            if k not in PROVEEDORES_NO_MATERIALES}
 
 
 def _cotizaciones_material(id_proveedor: str, descripcion: str | None = None) -> list[dict]:
-    """Cotizaciones en vivo de Obra (pipeline de mail, vía COTIZACIONES)
-    SUPERPUESTAS con el histórico propio cargado a mano en
-    MATERIALES_HISTORICO (seed del Excel de Juan) — una sola serie por
-    (proveedor, material), el histórico rellena lo viejo y COTIZACIONES
-    sigue sumando lo nuevo sin que haya que volver a tocar el histórico."""
-    vivo = [
-        r for r in sheets.read_records(sheets.OBRA_PRECIOS_SHEET_ID, "COTIZACIONES",
-                                        cache_key=f"obra_cotizaciones:{id_proveedor}")
-        if str(r.get("ID_PROVEEDOR")) == id_proveedor
-    ]
-    if MATERIALES_HISTORICO_EN_SUPABASE:
-        historico = db.leer_materiales_historico(id_proveedor)
-    else:
-        historico = [
-            r for r in sheets.read_records(_sheet_id(), "MATERIALES_HISTORICO")
-            if str(r.get("ID_PROVEEDOR")) == id_proveedor
-        ]
-    combinado = historico + vivo
+    """La serie de precios de un proveedor, de UNA sola fuente.
+
+    2026-09-06 — antes esto se ensamblaba: la Sheet COTIZACIONES del Drive de
+    Obra por un lado y nuestro histórico (`materiales_cotizaciones`) por el
+    otro. Se rompió calladito por dos cosas a la vez: Obra migró a Postgres y
+    dejó la planilla sin actualizar, y renumeró los proveedores (Cerámica Norte
+    pasó de 43 a 23) mientras acá seguían los números viejos. Resultado: la
+    pestaña no devolvía un solo precio y no lo decía, porque los ítems del
+    selector están escritos a mano.
+
+    Ahora el histórico vive DENTRO de `cotizaciones` (ver
+    unificar_materiales_en_cotizaciones.py) y esto solo lee. Lo que no se
+    ensambla no se puede desempalmar."""
+    filas = db.leer_cotizaciones(id_proveedor)
     if descripcion:
-        combinado = [r for r in combinado if r.get("DESCRIPCION") == descripcion]
-    return combinado
+        filas = [r for r in filas if r.get("DESCRIPCION") == descripcion]
+    return filas
 
 
 @app.route("/api/materiales/proveedores")
 def get_proveedores():
-    return jsonify(PROVEEDORES_MATERIALES)
+    return jsonify(_proveedores_materiales())
 
 
 @app.route("/api/materiales/<id_proveedor>")
 def get_materiales(id_proveedor):
-    if id_proveedor not in PROVEEDORES_MATERIALES:
+    if id_proveedor not in _proveedores_materiales():
         return jsonify({"error": "proveedor no reconocido o sin parser todavía"}), 404
     return jsonify(_cotizaciones_material(id_proveedor))
 
@@ -566,7 +570,7 @@ def get_materiales_items(id_proveedor):
     """Lista de materiales elegibles para ese proveedor. Si está curado
     (MATERIALES_CURADOS), son exactamente esos — si no, se descubren todos
     los que tengan al menos una cotización (comportamiento previo)."""
-    if id_proveedor not in PROVEEDORES_MATERIALES:
+    if id_proveedor not in _proveedores_materiales():
         return jsonify({"error": "proveedor no reconocido o sin parser todavía"}), 404
 
     registros = _cotizaciones_material(id_proveedor)
@@ -699,9 +703,9 @@ def get_proyeccion():
 # de cada uno vía el mismo merge_asof que ya usa ajuste.py, sin importar que
 # haya muchos más puntos de mano de obra que de material.
 INDICES_MATERIALES = {
-    "hierro": ("43", "HIERRO Aº TORS.Ø 10-BR X 12MT."),
-    "cemento": ("43", "CEMENTO PORTLAND X 25 KG. (LOMA NEGRA)-25"),
-    "ladrillo": ("43", "LADRILLO HUECO DE 1º 18X18X25-5"),
+    "hierro": ("23", "HIERRO Aº TORS.Ø 10-BR X 12MT."),
+    "cemento": ("23", "CEMENTO PORTLAND X 25 KG. (LOMA NEGRA)-25"),
+    "ladrillo": ("23", "LADRILLO HUECO DE 1º 18X18X25-5"),
 }
 
 
