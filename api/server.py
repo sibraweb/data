@@ -1255,6 +1255,15 @@ def index():
     return send_from_directory(BASE_DIR, "index.html")
 
 
+@app.route("/shared/<path:archivo>")
+def estaticos_shared(archivo):
+    """index.html carga shared/sibra-sb.js y shared/sibra-indices-api.js — el
+    camino por el que la MISMA página lee Supabase directo cuando no hay
+    backend (GitHub Pages). Servido acá arranca en modo local igual que
+    siempre; los scripts quedan cargados pero sin usar."""
+    return send_from_directory(BASE_DIR / "shared", archivo)
+
+
 @app.get("/api/estado-sync")
 def estado_sync():
     """Progreso de la sincronización inicial. El front lo consulta para refrescar

@@ -79,15 +79,24 @@ def proyectar(modelo: dict, rem_ipc_curva: list[dict], rem_fx_curva: list[dict])
     if not rem_ipc_curva or not rem_fx_curva:
         return []
 
-    ipc_por_periodo = {r["PERIODO"]: r["MEDIANA"] for r in rem_ipc_curva}
+    # float() explícito: desde que el REM vive en Postgres, MEDIANA llega como
+    # decimal.Decimal (la columna es numeric) y no como el float que daba
+    # Sheets. Decimal no se puede dividir por float, así que esta ruta venía
+    # rompiendo con TypeError — /api/proyectar tiraba 500 y la proyección no
+    # se veía en UOCRA/RIPTE/Construcción.
+    ipc_por_periodo = {r["PERIODO"]: float(r["MEDIANA"]) for r in rem_ipc_curva
+                       if r.get("MEDIANA") is not None}
     fx_niveles = sorted(rem_fx_curva, key=lambda r: r["PERIODO"])
 
-    valor = modelo["ultimo_valor"]
+    valor = float(modelo["ultimo_valor"])
     resultado = []
     fx_anterior = modelo.get("ultimo_fx")
+    fx_anterior = None if fx_anterior is None else float(fx_anterior)
     for fila in fx_niveles:
         periodo = fila["PERIODO"]
-        nivel_fx = fila["MEDIANA"]
+        if fila.get("MEDIANA") is None:
+            continue
+        nivel_fx = float(fila["MEDIANA"])
         var_ipc = ipc_por_periodo.get(periodo)
         if var_ipc is None or fx_anterior is None:
             fx_anterior = nivel_fx

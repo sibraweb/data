@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sibratech · Índices</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="shared/sibra-sb.js?v=2"></script>
+<script src="shared/sibra-indices-api.js?v=3"></script>
 <style>
   :root {
     --red: #E10600;
@@ -90,6 +92,41 @@
 
 <script>
 const API = (window.SIBRA_API_INDICES ?? (location.pathname.startsWith('/indices') ? '/indices' : ''));
+
+// De dónde salen los datos. Con api/server.py escuchando contesta Flask; si no
+// (GitHub Pages, que es estático) contesta shared/sibra-indices-api.js leyendo
+// Supabase con tu usuario. Se decide UNA vez, probando el server — no alcanza
+// con mirar la URL: servido desde el 8100 el prefijo también es "" y ahí sí
+// hay backend.
+let MODO_SB = false;
+
+async function detectarBackend() {
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 2500);
+    const r = await fetch(`${API}/api/estado-sync`, { signal: ctl.signal });
+    clearTimeout(t);
+    MODO_SB = !r.ok;
+  } catch { MODO_SB = true; }
+  return MODO_SB;
+}
+
+// Misma firma que fetch() para el resto de la página: devuelve algo con .ok,
+// .status y .json().
+function pedir(ruta) {
+  return MODO_SB ? SbIndices.get(ruta) : fetch(`${API}${ruta}`);
+}
+
+// El cartel de error tiene que decir la verdad del modo en el que está: pedir
+// que se prenda api/server.py no sirve de nada en la página publicada.
+function msgFalla(err) {
+  if (!MODO_SB) return `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
+  if (String(err?.message || '').includes('501')) {
+    return 'Esta pestaña necesita api/server.py: las cotizaciones vivas salen de la Sheet de ' +
+           'Obra (Google), y un sitio estático no puede leerla. Abrila desde el server local.';
+  }
+  return `No se pudieron traer los datos de la base${err?.message ? ` (${err.message})` : ''}.`;
+}
 
 const RANGOS = [
   { value: 'todo', label: 'Todo' },
@@ -732,7 +769,7 @@ async function cargarItemsMateriales(v) {
   const selItem = document.getElementById(`sel-item-${v.id}`);
   selItem.innerHTML = '<option disabled>Cargando…</option>';
   try {
-    const r = await fetch(`${API}/api/materiales/${idProv}/items`);
+    const r = await pedir(`/api/materiales/${idProv}/items`);
     const items = await r.json();
     selItem.innerHTML = items.map(it =>
       `<option value="${it.descripcion}">${it.descripcion} (${it.cotizaciones})</option>`
@@ -809,7 +846,7 @@ async function calcularPersonalizado() {
   try {
     const resultados = await Promise.all(resumenFilas.map(async f => {
       try {
-        const r = await fetch(`${API}/api/variacion?familia=${encodeURIComponent(f.familia)}&desde=${desde}&hasta=${hasta}`);
+        const r = await pedir(`/api/variacion?familia=${encodeURIComponent(f.familia)}&desde=${desde}&hasta=${hasta}`);
         if (!r.ok) return [f.familia, null];
         return [f.familia, await r.json()];
       } catch { return [f.familia, null]; }
@@ -824,7 +861,7 @@ async function calcularPersonalizado() {
 }
 
 async function obtenerEstimacionesRem() {
-  const r = await fetch(`${API}/api/rem/estimaciones`);
+  const r = await pedir(`/api/rem/estimaciones`);
   const data = await r.json();
   if (!r.ok) throw new Error(data.error || 'error');
   return data;
@@ -861,7 +898,7 @@ let uocraBasicosVigentes = {};
 let ultimoGapPct = null;
 
 async function cargarBasicosVigentesUocra() {
-  const r = await fetch(`${API}/api/series/uocra`);
+  const r = await pedir(`/api/series/uocra`);
   const registros = await r.json();
   const hoy = new Date().toISOString().slice(0, 10);
   const vigentes = registros.filter(reg => reg.FECHA <= hoy).sort((a, b) => a.FECHA.localeCompare(b.FECHA));
@@ -920,7 +957,7 @@ async function cargarInteranualOficial() {
   const elYtd = document.getElementById('obra-oficial-ytd');
   if (!elYoy || !elYtd) return;
   try {
-    const r = await fetch(`${API}/api/resumen`);
+    const r = await pedir(`/api/resumen`);
     const filas = await r.json();
     const fila = filas.find(f => f.familia === 'uocra');
     elYoy.textContent = fila && fila.yoy != null ? `${fila.yoy > 0 ? '+' : ''}${fila.yoy}%` : '—';
@@ -1045,7 +1082,7 @@ async function calcularRedeterminacion() {
   estadoEl.textContent = 'Calculando…';
   estadoEl.classList.remove('error');
   try {
-    const r = await fetch(`${API}/api/variacion?familia=${encodeURIComponent('uocra:' + categoria)}&desde=${fechaBase}&hasta=${fechaNueva}`);
+    const r = await pedir(`/api/variacion?familia=${encodeURIComponent('uocra:' + categoria)}&desde=${fechaBase}&hasta=${fechaNueva}`);
     const data = await r.json();
     if (!r.ok) {
       estadoEl.textContent = data.error || 'No hay datos para ese rango.';
@@ -1060,7 +1097,7 @@ async function calcularRedeterminacion() {
     ultimoGapPct = data.variacion_pct;
     actualizarMontosRedeterminados();
   } catch (err) {
-    estadoEl.textContent = `No se pudo conectar con el servidor local (${API}).`;
+    estadoEl.textContent = `${msgFalla(err)}`;
     estadoEl.classList.add('error');
   }
 }
@@ -1150,9 +1187,9 @@ async function calcularVariacionVentana(v) {
 
   estadoEl.textContent = 'Calculando…';
   try {
-    let url = `${API}/api/variacion?familia=${encodeURIComponent(familia)}&indice=${encodeURIComponent(ajuste)}&desde=${desde}&hasta=${hasta}`;
+    let url = `/api/variacion?familia=${encodeURIComponent(familia)}&indice=${encodeURIComponent(ajuste)}&desde=${desde}&hasta=${hasta}`;
     if (item) url += `&item=${encodeURIComponent(item)}`;
-    const r = await fetch(url);
+    const r = await pedir(url);
     const data = await r.json();
     if (!r.ok) {
       estadoEl.textContent = data.error || 'Sin datos suficientes en ese rango.';
@@ -1173,7 +1210,7 @@ async function calcularVariacionVentana(v) {
     renderMontoAjustado(v);
     estadoEl.textContent = `${data.dias} días entre las fechas usadas (último dato disponible en o antes de cada fecha pedida).`;
   } catch (err) {
-    estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
+    estadoEl.textContent = `${msgFalla(err)}`;
   }
 }
 
@@ -1252,13 +1289,13 @@ async function cargarVentana(v) {
 
   if (v.esResumen) {
     try {
-      const r = await fetch(`${API}/api/resumen`);
+      const r = await pedir(`/api/resumen`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       resumenFilas = await r.json();
       pintarResumen(resumenFilas);
       estadoEl.textContent = 'Actualizado';
     } catch (err) {
-      estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
+      estadoEl.textContent = `${msgFalla(err)}`;
       estadoEl.classList.add('error');
     }
     return;
@@ -1269,12 +1306,12 @@ async function cargarVentana(v) {
     // (siempre visibles, pedido de Juan) y el GRÁFICO de la serie elegida.
     // Si una falla, la otra tiene que seguir andando.
     try {
-      const r = await fetch(`${API}/api/financiamiento`);
+      const r = await pedir(`/api/financiamiento`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       pintarTarjetasFinanciamiento(v.id, await r.json());
     } catch (err) {
       document.getElementById(`fin-tarjetas-${v.id}`).innerHTML =
-        `<p class="estado error">No se pudieron traer las tasas vigentes (${API}).</p>`;
+        `<p class="estado error">${msgFalla(err)}</p>`;
     }
     try {
       const clave = document.getElementById(`sel-fin-${v.id}`).value;
@@ -1282,7 +1319,7 @@ async function cargarVentana(v) {
       if (BCRA_GRUPOS[clave]) {
         // Series simples: una llamada por familia, columna VALOR.
         series = (await Promise.all(BCRA_GRUPOS[clave].map(async ([familia, label]) => {
-          const r = await fetch(`${API}/api/series/${familia}`);
+          const r = await pedir(`/api/series/${familia}`);
           if (!r.ok) return null;
           const recs = await r.json();
           return {
@@ -1295,7 +1332,7 @@ async function cargarVentana(v) {
         }))).filter(s => s && s.puntos.length);
       } else {
         const [familia, cols] = FINANCIAMIENTO_COLS[clave];
-        const r = await fetch(`${API}/api/series/${familia}`);
+        const r = await pedir(`/api/series/${familia}`);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const recs = await r.json();
         series = cols.map(([col, label]) => ({
@@ -1315,7 +1352,7 @@ async function cargarVentana(v) {
           ? `${total} datos · ${series[0].puntos[0].fecha} a ${series[0].puntos.at(-1).fecha} · TNA %`
           : `${total} dato(s) — hace falta más de uno para que el gráfico muestre algo.`;
     } catch (err) {
-      estadoEl.textContent = `No se pudo traer el histórico (${API}). ¿Está corriendo api/server.py?`;
+      estadoEl.textContent = `${msgFalla(err)}`;
       estadoEl.classList.add('error');
     }
     return;
@@ -1333,7 +1370,7 @@ async function cargarVentana(v) {
       cargarInteranualOficial();
       estadoEl.textContent = 'Básicos vigentes cargados. Completá cantidades/fechas y calculá.';
     } catch (err) {
-      estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
+      estadoEl.textContent = `${msgFalla(err)}`;
       estadoEl.classList.add('error');
     }
     return;
@@ -1345,7 +1382,7 @@ async function cargarVentana(v) {
     extraEl.innerHTML = '';
     try {
       if (tipo === 'ipc_anual') {
-        const r = await fetch(`${API}/api/rem/anual`);
+        const r = await pedir(`/api/rem/anual`);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const { relevamiento, curva } = await r.json();
         if (!curva || !curva.length) {
@@ -1377,7 +1414,7 @@ async function cargarVentana(v) {
         await pintarResumenAnualRem(`rem-extra-${v.id}`, data);
         return;
       }
-      const r = await fetch(`${API}/api/rem/${tipo}`);
+      const r = await pedir(`/api/rem/${tipo}`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const { relevamiento, curva } = await r.json();
       if (!curva || curva.length === 0) {
@@ -1390,7 +1427,7 @@ async function cargarVentana(v) {
       estadoEl.textContent = `Relevamiento del ${relevamiento} · curva mensual (próximos ~${puntos.length} meses, valor al último día de cada mes)`;
       dibujar(v.id, [{ label: nombreSerie, puntos }]);
     } catch (err) {
-      estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
+      estadoEl.textContent = `${msgFalla(err)}`;
       estadoEl.classList.add('error');
     }
     return;
@@ -1420,7 +1457,7 @@ async function cargarVentana(v) {
     const idProv = selProv().value;
     try {
       const resultados = await Promise.all(seleccionados.map(async item => {
-        const r = await fetch(`${API}/api/ajustar?familia=${encodeURIComponent('mat:' + idProv)}&item=${encodeURIComponent(item)}&indice=${ajuste}`);
+        const r = await pedir(`/api/ajustar?familia=${encodeURIComponent('mat:' + idProv)}&item=${encodeURIComponent(item)}&indice=${ajuste}`);
         if (!r.ok) return { label: item, puntos: [] };
         return { label: item + sufijo, puntos: filtrarPorRango(await r.json(), rango) };
       }));
@@ -1434,7 +1471,7 @@ async function cargarVentana(v) {
       estadoEl.textContent = `${conDatos.length} material(es) · ${totalPuntos} cotizaciones en total`;
       dibujar(v.id, conDatos);
     } catch (err) {
-      estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
+      estadoEl.textContent = `${msgFalla(err)}`;
       estadoEl.classList.add('error');
     }
     return;
@@ -1466,7 +1503,7 @@ async function cargarVentana(v) {
           : (v.nombreSerie || v.nombre);
 
   try {
-    const r = await fetch(`${API}/api/ajustar?familia=${encodeURIComponent(familia)}&indice=${ajuste}`);
+    const r = await pedir(`/api/ajustar?familia=${encodeURIComponent(familia)}&indice=${ajuste}`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const puntos = filtrarPorRango(await r.json(), rango);
     if (!Array.isArray(puntos) || puntos.length === 0) {
@@ -1480,7 +1517,7 @@ async function cargarVentana(v) {
     const chkProy = v.proyectable && document.getElementById(`chk-proy-${v.id}`);
     if (chkProy && chkProy.checked) {
       try {
-        const rp = await fetch(`${API}/api/proyectar?familia=${encodeURIComponent(v.familia)}`);
+        const rp = await pedir(`/api/proyectar?familia=${encodeURIComponent(v.familia)}`);
         const dataProy = await rp.json();
         if (rp.ok && dataProy.proyeccion && dataProy.proyeccion.length) {
           puntosProy = dataProy.proyeccion;
@@ -1498,7 +1535,7 @@ async function cargarVentana(v) {
     dibujar(v.id, [{ label: nombreSerieBase + sufijo, puntos }], puntosProy);
     if (v.esUocra) await pintarValoresVigentesUocra();
   } catch (err) {
-    estadoEl.textContent = `No se pudo conectar con el servidor local (${API}). ¿Está corriendo api/server.py?`;
+    estadoEl.textContent = `${msgFalla(err)}`;
     estadoEl.classList.add('error');
   }
 }
@@ -1508,7 +1545,7 @@ async function pintarValoresVigentesUocra() {
   if (!cont) return;
   cont.innerHTML = '';
   try {
-    const r = await fetch(`${API}/api/series/uocra`);
+    const r = await pedir(`/api/series/uocra`);
     const registros = await r.json();
     if (!registros.length) return;
     const hoy = new Date().toISOString().slice(0, 10);
@@ -1548,7 +1585,7 @@ function selProv() { return document.getElementById('sel-prov-materiales'); }
 async function init() {
   render();
   try {
-    const r = await fetch(`${API}/api/materiales/proveedores`);
+    const r = await pedir(`/api/materiales/proveedores`);
     proveedoresMateriales = await r.json();
   } catch (err) {
     proveedoresMateriales = {};
@@ -1624,14 +1661,31 @@ async function init() {
   cargarVentana(VENTANAS[0]);
 }
 
-init();
+// Arranque: primero se averigua quién va a contestar. Si es Supabase hace
+// falta sesión, así que el login va ANTES de pintar nada — si no, el modal
+// aparecería recién cuando la primera consulta se lo topa.
+(async function arrancar() {
+  await detectarBackend();
+  if (MODO_SB) {
+    await SibraSB.ensureLogin();
+    const el = document.getElementById('estado-sync');
+    if (el) {
+      el.innerHTML = `Datos leídos de la base (Supabase) · <b>${SibraSB.sessionEmail() || ''}</b> ` +
+        `<a href="#" id="sb-salir" style="color:inherit">salir</a>`;
+      document.getElementById('sb-salir')?.addEventListener('click', e => {
+        e.preventDefault(); SibraSB.logout(); location.reload();
+      });
+    }
+  }
+  init();
+})();
 
 // KPI de uso de la base (plan free 500 MB). Barrita con color según cercanía al límite.
 (async function kpiUso() {
   const el = document.getElementById('kpi-uso');
   if (!el) return;
   try {
-    const r = await fetch(`${API}/api/uso-supabase`);
+    const r = await pedir(`/api/uso-supabase`);
     if (!r.ok) return;
     const u = await r.json();
     const color = u.pct >= 80 ? '#DC2626' : u.pct >= 50 ? '#D97706' : '#16A34A';
@@ -1655,7 +1709,7 @@ init();
   let listoPrevio = null;
   const tick = async () => {
     try {
-      const r = await fetch(`${API}/api/estado-sync`);
+      const r = await pedir(`/api/estado-sync`);
       if (!r.ok) return;                       // backend viejo, sin el endpoint
       const s = await r.json();
       if (el) el.textContent = s.listo
