@@ -49,7 +49,9 @@ from proyeccion import estimar_modelo, proyectar
 from rem_estimaciones import construir_curva_mensual, resumen_por_anio
 from resumen import resumen_serie
 from resumen import variacion as calcular_variacion
-from scrapers import alquileres, argentinadatos, bcra, bcra_rem, camarco, cauciones, dolares, icc, investing, mav, ripte, salarios, smvm, tim, uocra
+from scrapers import (alquileres, argentinadatos, bcra, bcra_rem, camarco, cauciones,
+                      dolares, icc, investing, mav, ripte, salarios, smvm, tim,
+                      uocra, yahoo)
 
 load_dotenv()
 
@@ -929,9 +931,31 @@ def refrescar_riesgo_pais():
 
 
 def refrescar_merval():
-    serie = investing.fetch_merval()
+    """MERVAL, con Investing primero y Yahoo de respaldo.
+
+    ⚠ DOS FUENTES PORQUE UNA TE PUEDE CERRAR LA PUERTA SIN AVISAR. El
+    2026-09-08 Investing empezo a devolver 403 y la serie quedo clavada en
+    julio: la unica señal fue que la sincronizacion diaria fallaba en un
+    renglon, y nadie la miraba. Juan: *«no puede ser que no exista página que
+    publique esto»* — y no lo era: Yahoo publica `^MERV` entero desde 1996,
+    con un GET pelado.
+
+    Se intenta Investing primero porque es la que ya venia poblando la serie y
+    no tiene sentido cambiarle la fuente a los datos historicos por gusto. Si
+    falla, entra Yahoo y SE DICE cual se uso: dos fuentes silenciosas serian
+    una sola fuente y un misterio.
+    """
+    fuente, serie, error = "investing", [], None
+    try:
+        serie = investing.fetch_merval()
+    except Exception as e:
+        error = f"{type(e).__name__}: {str(e)[:90]}"
+        fuente = "yahoo"
+        serie = yahoo.fetch_merval()
     n = _guardar_simple("MERVAL", serie)
-    print(f"[scheduler] MERVAL +{n} filas")
+    if error:
+        print(f"[scheduler] MERVAL: investing fallo ({error}) -> se uso yahoo")
+    print(f"[scheduler] MERVAL +{n} filas (fuente: {fuente})")
 
 
 def refrescar_cac():
