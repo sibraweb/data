@@ -49,7 +49,7 @@ from proyeccion import estimar_modelo, proyectar
 from rem_estimaciones import construir_curva_mensual, resumen_por_anio
 from resumen import resumen_serie
 from resumen import variacion as calcular_variacion
-from scrapers import alquileres, argentinadatos, bcra, bcra_rem, camarco, cauciones, dolares, icc, investing, mav, ripte, salarios, tim, uocra
+from scrapers import alquileres, argentinadatos, bcra, bcra_rem, camarco, cauciones, dolares, icc, investing, mav, ripte, salarios, smvm, tim, uocra
 
 load_dotenv()
 
@@ -228,6 +228,7 @@ SERIES_ANCHAS_SUPABASE = {
     "DOLAR", "UOCRA", "CONSTRUCCION", "CAC", "SALARIOS",
     "ICC_CABA", "ICC_BUENOS_AIRES", "ICC_CORDOBA", "ICC_SANTA_FE",
     "ALQUILER_CABA", "RIPTE", "CAUCION", "CHEQUES", "PAGARES",
+    "SMVM",
 }
 SERIES_EN_SUPABASE = SERIES_SIMPLES_SUPABASE | SERIES_ANCHAS_SUPABASE
 REM_EN_SUPABASE = True
@@ -1146,6 +1147,26 @@ def refrescar_ripte():
     print(f"[scheduler] RIPTE +{n} filas")
 
 
+def refrescar_smvm():
+    """Salario Minimo Vital y Movil.
+
+    ⚠ NO ES UNA SERIE MENSUAL: cambia cuando sale una resolucion y entre una y
+    otra se mantiene. Se guarda la fecha DESDE la que rige cada tramo, asi que
+    para una fecha cualquiera hay que tomar el ultimo valor anterior o igual —
+    buscar el mes exacto devuelve vacio casi siempre.
+
+    Refresca semanal como el RIPTE: no cambia seguido, pero cuando el Consejo
+    del Salario publica una resolucion aparecen 3 o 4 tramos de una.
+    """
+    serie = smvm.fetch_serie()
+    filas = [{"FECHA": x["FECHA"], "VALOR": x["VALOR"]} for x in serie]
+    n = _guardar_simple("SMVM", filas)
+    if smvm.NO_LEIDAS:
+        # se dice, no se traga: la fuente tiene un typo real («2109»)
+        print(f"[scheduler] SMVM ⚠ filas ilegibles: {list(smvm.NO_LEIDAS)[:4]}")
+    print(f"[scheduler] SMVM +{n} filas")
+
+
 def refrescar_rem():
     sid = _sheet_id()
     datos = bcra_rem.fetch_rem()
@@ -1176,6 +1197,7 @@ FUENTES_MANUALES = {
     "caucion": refrescar_caucion,
     "mav": refrescar_mav,
     "ripte": refrescar_ripte,
+    "smvm": refrescar_smvm,
     "rem": refrescar_rem,
     "tim": refrescar_tim,
     "riesgo_pais": refrescar_riesgo_pais,
@@ -1234,6 +1256,7 @@ def iniciar_scheduler():
 
     # Semanal — publicación irregular, no vale la pena scrapear más seguido
     sched.add_job(refrescar_ripte, "interval", days=7)
+    sched.add_job(refrescar_smvm, "interval", days=7)
     sched.add_job(refrescar_rem, "interval", days=7)
     sched.add_job(refrescar_uocra, "interval", days=7)
     sched.add_job(refrescar_salarios, "interval", days=7)
