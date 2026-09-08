@@ -48,6 +48,23 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
+# ⚠⚠⚠ NO USAR PARA CARGAR SIN REVISAR A MANO — 2026-09-08.
+#
+# El parser lee bien las secciones modernas («Acuerdo <Mes> <Año>», de 2019 en
+# adelante: 143 valores contrastados contra los datos que Juan copio de la
+# propia UOCRA, cero diferencias) y NO lee bien las viejas, donde los
+# encabezados cambian de forma («Acuerdo 2017», «Acuerdos Mayo, Septiembre y
+# Diciembre 2022», «Acuerdo 2016 - 1er semestre») y las filas no siempre traen
+# mes.
+#
+# Con esas secciones produce valores que no coinciden NI con la pagina NI con
+# la base: para abril-2018 la pagina dice 102,43 —igual que la base— y el
+# parser devolvia 17,88. Se cargaron 7 meses con esta version y 4 estaban mal o
+# directamente no existian en la pagina; se borraron los 35 valores.
+#
+# Lo que queda pendiente es acotar la lectura a las secciones que se leen bien
+# —o arreglar las viejas— antes de volver a cargar nada. La fuente es buena;
+# el que no esta a la altura es este parser.
 URL = "https://jorgevega.com.ar/11-laboral/384-uocra-escala-salarial-2017.html"
 _UA = {"User-Agent": "Mozilla/5.0"}
 
@@ -119,9 +136,34 @@ def fetch_escalas() -> list[dict]:
         if not celdas:
             continue
         if len(celdas) == 1:
-            m = re.search(r"acuerdo\s+([a-záéíóúñ]+)\s+(\d{4})", celdas[0], re.I)
-            if m:
-                anio = int(m.group(2))
+            # ⚠⚠ NO TODOS LOS ENCABEZADOS DICEN «Acuerdo <Mes> <Año>».
+            # Once de los 36 tienen otra forma: «Acuerdo 2017», «Acuerdo 2016 -
+            # 1er semestre», «Acuerdos Mayo, Septiembre y Diciembre 2022». Con
+            # el patron viejo esos no matcheaban y el año quedaba con el valor
+            # de la SECCION ANTERIOR — o sea que sus filas se guardaban con un
+            # año que no era el suyo y pisaban meses buenos.
+            #
+            # Eso es lo que produjo las 44 discrepancias contra los datos que
+            # Juan habia copiado de la propia UOCRA, todas concentradas en
+            # 2018, 2022, 2023 y 2024: la pagina estaba bien, el parser no.
+            #
+            # Ahora se busca el año en cualquier parte del encabezado, y si NO
+            # HAY se pone en None: las filas de una seccion cuyo año no se pudo
+            # leer se SALTEAN y se avisan. Heredar el anterior es justamente lo
+            # que fabrica el error silencioso.
+            if re.search(r"acuerdos?", celdas[0], re.I):
+                m = re.search(r"(20\d{2})", celdas[0])
+                if m:
+                    anio = int(m.group(1))
+                else:
+                    anio = None
+                    NO_LEIDAS.append("encabezado sin año: " + celdas[0][:50])
+                # ⚠⚠ Y EL MES TAMBIEN SE REINICIA. Sin esto, una fila de la
+                # seccion nueva que no traiga mes propio se queda con el de la
+                # ANTERIOR: por eso tres filas distintas caian todas en
+                # 2018-04 y la ultima pisaba a las otras dos. El mes vale
+                # dentro de su seccion, no despues.
+                mes = None
             continue                       # notas y encabezados de seccion
 
         # la fila trae mes propio cuando tiene 10 u 11 celdas
