@@ -163,6 +163,20 @@ const INDICES_AJUSTE = [
   { value: 'hierro', label: '÷ Hierro (barra Ø10mm, Cerámica Norte)' },
   { value: 'cemento', label: '÷ Cemento (bolsa 25kg Loma Negra, Cerámica Norte)' },
   { value: 'ladrillo', label: '÷ Ladrillo hueco 18x18x25 (Cerámica Norte)' },
+  // ⚠ UOCRA faltaba en la lista, no en el motor: el server ya resolvía
+  // «uocra:OFICIAL» desde siempre (SERIES_MULTI_COLUMNA) y la pantalla nunca
+  // lo ofreció. Juan, 2026-09-09: «me gustaría que los materiales se puedan
+  // ajustar por UOCRA».
+  //
+  // Es el ajuste que más dice de una obra: el cociente material ÷ jornal
+  // contesta «cuántas horas de oficial cuesta esta bolsa de cemento», que es
+  // la pregunta real cuando se decide comprar ahora o esperar. Van las cuatro
+  // categorías porque el mix de cada obra es distinto — el ayudante y el
+  // especializado no se movieron igual.
+  { value: 'uocra:OFICIAL', label: '÷ UOCRA · Oficial' },
+  { value: 'uocra:OFICIAL_ESPECIALIZADO', label: '÷ UOCRA · Oficial especializado' },
+  { value: 'uocra:MEDIO_OFICIAL', label: '÷ UOCRA · Medio oficial' },
+  { value: 'uocra:AYUDANTE', label: '÷ UOCRA · Ayudante' },
   { value: 'salarios:INDICE_TOTAL', label: '÷ Salario (INDEC, índice total)' },
   { value: 'cac:COSTO_CONSTRUCCION', label: '÷ Costo de construcción (CAMARCO)' },
   { value: 'construccion:INDICE_GENERAL', label: '÷ Construcción (APYMECO)' },
