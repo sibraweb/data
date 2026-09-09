@@ -55,8 +55,17 @@ const SbIndices = (() => {
 
   const DOLAR_TAB = 'DOLAR';
   const DOLAR_COLUMNAS = {
+    /* ⚠ `dolar_x` a secas = punta VENDEDORA. La norma y el porqué están en
+       `indices/api/server.py` (DOLAR_COLUMNAS): se toma venta porque casi todo
+       lo que hacemos con el dólar es comprarlo. Para VALUAR dólares que ya
+       tenemos va la compradora, y por eso los `_compra` hay que pedirlos. */
     dolar_oficial: 'OFICIAL_VENTA', dolar_blue: 'BLUE_VENTA', dolar_mep: 'MEP_VENTA',
     dolar_ccl: 'CCL_VENTA', dolar_mayorista: 'MAYORISTA_VENTA',
+    dolar_cripto: 'CRIPTO_VENTA', dolar_tarjeta: 'TARJETA_VENTA',
+    dolar_oficial_compra: 'OFICIAL_COMPRA', dolar_blue_compra: 'BLUE_COMPRA',
+    dolar_mep_compra: 'MEP_COMPRA', dolar_ccl_compra: 'CCL_COMPRA',
+    dolar_mayorista_compra: 'MAYORISTA_COMPRA',
+    dolar_cripto_compra: 'CRIPTO_COMPRA', dolar_tarjeta_compra: 'TARJETA_COMPRA',
   };
 
   // Tabs de una sola columna en series_valores (columna = '_'), server.py:224

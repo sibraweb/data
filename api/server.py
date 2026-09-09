@@ -104,12 +104,43 @@ SERIES_BCRA_MENSUALES = [
 PROYECTABLES = {"uocra", "construccion", "ripte"}
 
 DOLAR_TAB = "DOLAR"
+
+# ⚠⚠ LA NORMA: `dolar_x` A SECAS ES LA PUNTA **VENDEDORA**.
+#
+# Juan, 2026-09-09: *«en el caso de MEP o CCL no sé si tenemos anotada una
+# norma de si tomar comprador o vendedor»*. Estaba aplicada en dos archivos
+# (acá y en `shared/sibra-indices-api.js`) y escrita en ninguno, que es como
+# una convención se pierde: el día que alguien agrega una serie elige la otra
+# punta sin saber que había un criterio.
+#
+# **Se toma VENTA porque casi todo lo que hacemos con el dólar es COMPRARLO**:
+# ajustar un precio, presupuestar un insumo importado, ver cuánto cuesta
+# hacerse de divisas. Ese es el precio al que la operación sale.
+#
+# ⚠ Y hay un caso donde NO corresponde: **valuar dólares que ya tenemos**. Ahí
+# lo realizable es lo que nos pagarían, o sea la punta COMPRADORA. Por eso los
+# alias `_compra` existen y son explícitos: el que valuá una tenencia tiene que
+# pedirla, no recibirla por descuido.
+#
+# La diferencia no es decorativa: al 2026-09-09 el MEP compra 1.522,80 y vende
+# 1.530,40 — medio punto, que sobre una tenencia en dólares es plata.
 DOLAR_COLUMNAS = {
+    # la punta vendedora, que es la norma
     "dolar_oficial": "OFICIAL_VENTA",
     "dolar_blue": "BLUE_VENTA",
     "dolar_mep": "MEP_VENTA",
     "dolar_ccl": "CCL_VENTA",
     "dolar_mayorista": "MAYORISTA_VENTA",
+    "dolar_cripto": "CRIPTO_VENTA",
+    "dolar_tarjeta": "TARJETA_VENTA",
+    # la compradora, para valuar lo que ya se tiene. Hay que pedirla.
+    "dolar_oficial_compra": "OFICIAL_COMPRA",
+    "dolar_blue_compra": "BLUE_COMPRA",
+    "dolar_mep_compra": "MEP_COMPRA",
+    "dolar_ccl_compra": "CCL_COMPRA",
+    "dolar_mayorista_compra": "MAYORISTA_COMPRA",
+    "dolar_cripto_compra": "CRIPTO_COMPRA",
+    "dolar_tarjeta_compra": "TARJETA_COMPRA",
 }
 
 # Cauciones en pesos (BYMA, tasa TNA %) — curva completa en vivo la sigue
