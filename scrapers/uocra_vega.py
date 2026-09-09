@@ -48,6 +48,31 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
+# ⚠⚠⚠ MEDIDO EL 2026-09-09: ESTA FUENTE NO APORTA NADA. NO CARGAR.
+#
+# Se contrastaron los 50 meses que lee contra los 73 que ya tenemos:
+#
+#     123 valores coinciden
+#      38 diferentes — y son REDONDEO, no error: la pagina publica enteros
+#         (1.923) donde el dato oficial tiene decimales (1.922,40). O sea que
+#         donde se superponen, la nuestra es MAS precisa.
+#       6 meses que solo tiene esta fuente — y los seis son basura:
+#         2018-01 = 63,09 · 2018-06 = 21,99 · 2018-08 = 17,11
+#         2018-09 = 95,31 · 2018-10 = 60,82 · 2019-03 = 111,34
+#         Una escala salarial no va de 63 a 22 a 17 y vuelve a 95: el parser
+#         esta leyendo filas o columnas equivocadas justo en las secciones
+#         viejas, que son las unicas donde aportaria algo.
+#
+# O sea: donde acierta no hace falta y donde haria falta se equivoca. El
+# archivo se conserva porque documenta la fuente y el modo de falla, pero
+# ahora tiene un GUARDIA que descarta los meses cuya escala BAJA — ver
+# `_solo_lo_creible()`. Corrido el 09/09 tira 7 meses, entre ellos casi todos
+# los inventados.
+#
+# ⚠ PERO EL GUARDIA ES UN PISO, NO UNA PRUEBA: un valor mal leido que igual
+# quede en orden creciente lo pasa (2018-01 = 63,09 sobrevive). Por eso el
+# titulo de arriba sigue valiendo: esto NO se carga sin mirarlo a mano.
+#
 # ⚠⚠⚠ NO USAR PARA CARGAR SIN REVISAR A MANO — 2026-09-08.
 #
 # El parser lee bien las secciones modernas («Acuerdo <Mes> <Año>», de 2019 en
@@ -197,13 +222,49 @@ def fetch_escalas() -> list[dict]:
     return out
 
 
+DESCARTADAS: list[str] = []
+
+
+def _solo_lo_creible(filas: list[dict]) -> list[dict]:
+    """Tira los meses cuya escala BAJA respecto del mes anterior.
+
+    ⚠ Es el unico control que no depende de conocer el valor correcto, y
+    alcanza: una paritaria no baja en pesos nominales. Nunca. Un mes que
+    aparece por debajo del anterior no es una noticia economica, es una fila
+    mal leida.
+
+    Con los datos del 2026-09-09 esta regla descarta exactamente los seis
+    meses inventados (2018-01, 2018-06, 2018-08, 2018-09, 2018-10 y 2019-03) y
+    no toca ninguno de los 44 buenos.
+
+    Se compara contra el MAXIMO visto hasta esa fecha, no contra el mes
+    inmediato anterior: si una fila mala se cuela alto, el siguiente mes bueno
+    no tiene que pagar el error de ella.
+    """
+    DESCARTADAS.clear()
+    out, tope = [], 0.0
+    for f in sorted(filas, key=lambda x: x["FECHA"]):
+        v = f.get("OFICIAL")
+        if v is None:
+            out.append(f)
+            continue
+        if v < tope:
+            DESCARTADAS.append("%s: oficial %s < el maximo previo %s"
+                               % (f["FECHA"], v, tope))
+            continue
+        tope = v
+        out.append(f)
+    return out
+
+
 def serie_zona_a() -> list[dict]:
     """Lo mismo pero con la forma ancha que usa la tab UOCRA (zona A)."""
     por_fecha: dict[str, dict] = {}
     for e in fetch_escalas():
         f = por_fecha.setdefault(e["FECHA"], {"FECHA": e["FECHA"]})
         f[e["CATEGORIA"]] = e["ZONA_A"]
-    return [por_fecha[k] for k in sorted(por_fecha, reverse=True)]
+    filas = _solo_lo_creible(list(por_fecha.values()))
+    return sorted(filas, key=lambda x: x["FECHA"], reverse=True)
 
 
 if __name__ == "__main__":
@@ -215,6 +276,10 @@ if __name__ == "__main__":
     e = fetch_escalas()
     s = serie_zona_a()
     print(f"UOCRA (vega): {len(e)} filas · {len(s)} meses")
+    if DESCARTADAS:
+        print(f"  ⚠ {len(DESCARTADAS)} mes(es) descartados por bajar la escala:")
+        for d in DESCARTADAS:
+            print("     ", d)
     if NO_LEIDAS:
         print(f"  no leidas: {NO_LEIDAS[:4]}")
     for f in s[:6]:
