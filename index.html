@@ -249,6 +249,7 @@ const VENTANAS = [
   { id: 'financiamiento', nombre: 'Financiamiento', esFinanciamiento: true },
   { id: 'rem', nombre: 'Proyecciones (REM)', esRem: true },
   { id: 'obra', nombre: 'Cálculo de Obra', esObra: true },
+  { id: 'mora', nombre: 'Mora y descuento', esMora: true },
 ];
 
 // Financiamiento (pedido de Juan, 2026-08-09): qué se puede graficar.
@@ -500,6 +501,40 @@ function render() {
             <label>Rango</label>
             ${crearSelect(`sel-rango-${v.id}`, RANGOS, 'label', 'value')}
           </div>
+          ${v.esMora ? `
+            <!-- ── MORA Y DESCUENTO DE CERTIFICADOS ──────────────────────
+                 Juan, 2026-09-10: «vamos a poner considerar interés simple,
+                 considerar compuesto, y vemos la diferencia».
+
+                 ⚠ Los DOS se muestran siempre, uno al lado del otro. Un
+                 selector obligaría a elegir antes de ver, y la pregunta real
+                 no es cuál prefiero sino cuánto hay entre uno y otro — lo que
+                 está en juego cuando el contrato no lo aclara. -->
+            <div class="campos">
+              <div class="campo"><label>Importe del certificado</label>
+                <input type="number" id="mora-monto" step="0.01" placeholder="0,00" style="width:170px"></div>
+              <div class="campo"><label>Debía pagarse</label>
+                <input type="date" id="mora-desde"></div>
+              <div class="campo"><label>Se paga / se cobra</label>
+                <input type="date" id="mora-hasta"></div>
+              <div class="campo"><label>Tasa</label>
+                <select id="mora-tasa" style="min-width:260px"></select></div>
+              <div class="campo"><label>Qué se calcula</label>
+                <select id="mora-modo">
+                  <option value="mora">Mora — me pagaron tarde</option>
+                  <option value="descuento">Descuento — cobrar antes</option>
+                </select></div>
+              <div class="campo"><label>Año de</label>
+                <select id="mora-dias">
+                  <option value="365">365 días</option>
+                  <option value="360">360 días</option>
+                </select></div>
+              <div class="campo"><label>&nbsp;</label>
+                <button type="button" id="mora-calcular">Calcular</button></div>
+            </div>
+            <div id="mora-rango" class="nota"></div>
+            <div id="mora-resultado"></div>
+          ` : ''}
           ${v.esMateriales ? `
             <div class="campo">
               <label>Proveedor</label>
@@ -1373,6 +1408,8 @@ async function cargarVentana(v) {
     return;
   }
 
+  if (v.esMora) { await iniciarMora(); return; }
+
   if (v.esObra) {
     try {
       renderFilasSuperficie();
@@ -1741,6 +1778,128 @@ async function init() {
   };
   tick();
 })();
+
+/* ══ MORA Y DESCUENTO DE CERTIFICADOS ═════════════════════════════
+   El calculo vive en el server (api/mora.py). Aca solo se pide y se muestra.
+
+   ⚠ SE MUESTRAN LOS DOS SIEMPRE. Juan: «vamos a poner considerar interes
+   simple, considerar compuesto, y vemos la diferencia». La pregunta no es
+   cual prefiero: es cuanto hay entre uno y otro. */
+let _moraTasas = [];
+
+async function iniciarMora() {
+  const sel = document.getElementById('mora-tasa');
+  if (!sel) return;
+  if (!_moraTasas.length) {
+    try {
+      const r = await pedir('/api/mora/tasas');
+      _moraTasas = await r.json();
+    } catch (e) { _moraTasas = []; }
+  }
+  sel.innerHTML = _moraTasas.map(t =>
+    `<option value="${t.clave}">${t.nombre}${t.es_indice ? '  (índice)' : ''}</option>`).join('');
+  const hoy = new Date().toISOString().slice(0, 10);
+  const h = document.getElementById('mora-hasta');
+  if (h && !h.value) h.value = hoy;
+  sel.onchange = pintarRangoMora;
+  pintarRangoMora();
+  document.getElementById('mora-calcular').onclick = calcularMora;
+}
+
+/* ⚠ SE DICE DE CUANDO A CUANDO HAY DATOS, ANTES DE CALCULAR. Elegir TAMAR
+   para un certificado de 2019 tiene que poder verse antes, no despues de un
+   error. */
+function pintarRangoMora() {
+  const clave = document.getElementById('mora-tasa').value;
+  const t = _moraTasas.find(x => x.clave === clave);
+  const el = document.getElementById('mora-rango');
+  if (!t || !el) return;
+  el.textContent = `${t.nombre}: hay datos del ${t.desde} al ${t.hasta} `
+    + `(${t.n.toLocaleString('es-AR')} días)`
+    + (t.es_indice ? ' · es un ÍNDICE acumulado, no una TNA' : '');
+}
+
+async function calcularMora() {
+  const monto = document.getElementById('mora-monto').value;
+  const desde = document.getElementById('mora-desde').value;
+  const hasta = document.getElementById('mora-hasta').value;
+  const tasa = document.getElementById('mora-tasa').value;
+  const modo = document.getElementById('mora-modo').value;
+  const dias = document.getElementById('mora-dias').value;
+  const out = document.getElementById('mora-resultado');
+  if (!monto || !desde || !hasta) {
+    out.innerHTML = '<div class="nota">Falta el importe o alguna fecha.</div>';
+    return;
+  }
+  out.innerHTML = '<div class="nota">Calculando…</div>';
+  try {
+    const r = await pedir(`/api/mora?monto=${encodeURIComponent(monto)}`
+      + `&desde=${desde}&hasta=${hasta}&tasa=${tasa}&modo=${modo}&dias_anio=${dias}`);
+    const d = await r.json();
+    if (!r.ok || d.error) {
+      out.innerHTML = `<div class="nota error">${d.error || 'No se pudo calcular.'}</div>`;
+      return;
+    }
+    out.innerHTML = pintarMora(d, modo);
+  } catch (e) {
+    out.innerHTML = `<div class="nota error">${e.message}</div>`;
+  }
+}
+
+function _ars(n) {
+  return (n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function pintarMora(d, modo) {
+  const esDesc = modo === 'descuento';
+  const caja = (titulo, x, resaltar) => `
+    <div style="flex:1;min-width:230px;border:1px solid ${resaltar ? '#1a7a4a' : 'var(--borde,#ddd)'};
+         border-radius:8px;padding:12px;">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;
+           color:${resaltar ? '#1a7a4a' : '#888'};font-weight:700;">${titulo}</div>
+      ${esDesc ? `
+        <div style="font-size:22px;font-weight:700;margin:6px 0;">$ ${_ars(x.valor_hoy)}</div>
+        <div style="font-size:12px;color:#666;">te dan hoy</div>
+        <div style="margin-top:8px;font-size:13px;">
+          te cuesta <b>$ ${_ars(x.costo_del_descuento)}</b>
+          <span style="color:#888;">(${x.pct_del_nominal.toFixed(2)} % del nominal)</span></div>
+      ` : `
+        <div style="font-size:22px;font-weight:700;margin:6px 0;">$ ${_ars(x.total)}</div>
+        <div style="font-size:12px;color:#666;">total a cobrar</div>
+        <div style="margin-top:8px;font-size:13px;">
+          interés <b>$ ${_ars(x.interes)}</b>
+          <span style="color:#888;">(${x.pct.toFixed(2)} %)</span></div>
+      `}
+      <div style="font-size:11px;color:#999;margin-top:6px;">
+        coeficiente ${x.coeficiente.toFixed(6)}</div>
+    </div>`;
+
+  const dif = d.diferencia;
+  return `
+    <div style="margin-top:12px;">
+      <div style="font-size:13px;color:#666;margin-bottom:8px;">
+        <b>${d.tasa_nombre}</b> · ${d.dias} días
+        (${d.desde} → ${d.hasta}) · año de ${d.dias_anio} días
+        · sobre $ ${_ars(d.monto)}
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        ${caja('Interés simple', d.simple, false)}
+        ${caja('Interés compuesto', d.compuesto, true)}
+      </div>
+      <div style="margin-top:12px;padding:10px 12px;border-radius:8px;
+           background:rgba(240,180,20,.10);border-left:3px solid #b7791f;font-size:13px;">
+        <b>La diferencia son $ ${_ars(Math.abs(dif.interes))}</b>
+        — el compuesto da ${dif.pct_sobre_simple.toFixed(1)} % más de interés que el simple.
+        <div style="font-size:12px;color:#666;margin-top:4px;">
+          No son dos opiniones: cuál corresponde lo dice el contrato. Acá están
+          los dos para ver cuánto hay en juego cuando no lo aclara.</div>
+      </div>
+      <div class="nota" style="margin-top:10px;">${d.detalle.nota}</div>
+      ${(d.avisos || []).length
+        ? `<div class="nota error" style="margin-top:6px;">⚠ ${d.avisos.join(' · ')}</div>` : ''}
+    </div>`;
+}
+
 </script>
 </body>
 </html>

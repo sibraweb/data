@@ -834,6 +834,72 @@ def _resolver_familia(familia: str, item: str | None = None):
     return None, None, None
 
 
+# ── MORA Y DESCUENTO DE CERTIFICADOS ────────────────────────────────────────
+# Juan, 2026-09-10. El motor esta en `mora.py`; aca solo se le acerca la serie.
+#
+# Las tasas ofrecidas son las que un contrato de obra puede nombrar de verdad.
+# ⚠ USO_JUSTICIA va primera porque es la que aplican los juzgados, y es la
+# unica del grupo que es un INDICE — el motor lo sabe y no la capitaliza dos
+# veces.
+TASAS_MORA = [
+    ("uso_justicia", "USO_JUSTICIA", "Uso de justicia (Com. 14.290)", True),
+    ("tm20", "TM20", "TM20 · plazos fijos +20 millones", False),
+    ("badlar", "BADLAR", "BADLAR · bancos privados", False),
+    ("tamar", "TAMAR", "TAMAR · desde oct-2024", False),
+    ("adelantos_grandes", "ADELANTOS_GRANDES",
+     "Adelantos en cuenta 1-7 días (10M+)", False),
+    ("adelantos", "ADELANTOS_CTA_CTE", "Adelantos en cuenta corriente", False),
+    ("tim", "TIM", "TIM · intereses moratorios (CCC 768)", False),
+]
+_TASAS_MORA = {c: (tab, nombre, es_idx) for c, tab, nombre, es_idx in TASAS_MORA}
+
+
+@app.route("/api/mora/tasas")
+def mora_tasas():
+    """Que tasas se pueden elegir, con desde/hasta reales de cada una.
+
+    ⚠ Se informa el rango QUE HAY, no el que deberia haber: elegir TAMAR para
+    un certificado de 2019 tiene que poder verse antes de calcular, no despues.
+    """
+    out = []
+    for clave, tab, nombre, es_idx in TASAS_MORA:
+        try:
+            v = db.leer_serie_simple(tab)
+        except Exception:
+            v = []
+        out.append({"clave": clave, "nombre": nombre, "es_indice": es_idx,
+                    "n": len(v),
+                    "desde": v[0]["FECHA"] if v else None,
+                    "hasta": v[-1]["FECHA"] if v else None})
+    return jsonify(out)
+
+
+@app.route("/api/mora")
+def get_mora():
+    """?monto=&desde=&hasta=&tasa=&modo=mora|descuento&dias_anio=365"""
+    import mora as _mora
+    clave = (request.args.get("tasa") or "uso_justicia").strip()
+    if clave not in _TASAS_MORA:
+        return jsonify({"error": "tasa desconocida: %s" % clave}), 404
+    tab, nombre, es_idx = _TASAS_MORA[clave]
+    try:
+        monto = float(request.args.get("monto") or 0)
+    except ValueError:
+        return jsonify({"error": "monto invalido"}), 400
+    desde, hasta = request.args.get("desde"), request.args.get("hasta")
+    if not desde or not hasta:
+        return jsonify({"error": "faltan desde y hasta"}), 400
+    dias_anio = request.args.get("dias_anio", default=365, type=int)
+    valores = db.leer_serie_simple(tab)
+    fn = _mora.descontar if request.args.get("modo") == "descuento" else _mora.calcular
+    r = fn(monto, desde, hasta, tab, valores, es_indice=es_idx,
+           dias_anio=dias_anio)
+    if "error" in r:
+        return jsonify(r), 400
+    r["tasa_nombre"] = nombre
+    return jsonify(r)
+
+
 @app.route("/api/ajustar")
 def get_ajustado():
     familia = request.args.get("familia")
