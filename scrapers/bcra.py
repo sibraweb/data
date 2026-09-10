@@ -50,6 +50,27 @@ ID_ADELANTOS_CTA_CTE = 13
 ID_PRESTAMOS_PERSONALES = 14
 ID_TAMAR = 44
 
+# ── Las tres que hacen falta para calcular MORA (Juan, 2026-09-10) ──────────
+# Pedidas al armar la pestana de mora en el pago de certificados. Las tres
+# existen en el catalogo del BCRA (1000 series) y ninguna estaba.
+#
+# ⚠⚠ LA 43 NO ES UNA TNA, ES UN INDICE ACUMULADO. Al 2026-09-10 vale
+# 26.984,26 — si alguien la lee como "26.984 % anual" el calculo sale por el
+# techo. Se usa como el CER: valor_final / valor_inicial da el coeficiente del
+# periodo. Es la tasa que fija el BCRA por el Comunicado P 14.290 y la que los
+# juzgados aplican para actualizar deudas ("uso de justicia").
+ID_USO_JUSTICIA = 43
+
+# TM20: plazos fijos de MAS de 20 millones, bancos privados. Es la que suelen
+# nombrar los pliegos de obra publica para la mora del comitente — mas alta
+# que BADLAR porque es de depositos mayoristas grandes. Desde 2017-01-02.
+ID_TM20 = 8
+
+# Adelantos en cuenta corriente a 1-7 dias por 10 millones o mas: la tasa a la
+# que un banco te presta plata YA. Es el piso realista de lo que cuesta cubrir
+# un certificado que no cobraste. Desde 2013-01-02.
+ID_ADELANTOS_GRANDES = 145
+
 _LIMIT = 3000  # máximo por página que acepta la API
 
 
@@ -126,6 +147,19 @@ def fetch_adelantos_cta_cte(desde: str | None = None, hasta: str | None = None) 
 
 def fetch_prestamos_personales(desde: str | None = None, hasta: str | None = None) -> list[dict]:
     return fetch_serie(ID_PRESTAMOS_PERSONALES, desde, hasta)
+
+
+def fetch_uso_justicia(desde: str | None = None, hasta: str | None = None) -> list[dict]:
+    """⚠ Devuelve un INDICE acumulado, no un porcentaje. Ver ID_USO_JUSTICIA."""
+    return fetch_serie(ID_USO_JUSTICIA, desde, hasta)
+
+
+def fetch_tm20(desde: str | None = None, hasta: str | None = None) -> list[dict]:
+    return fetch_serie(ID_TM20, desde, hasta)
+
+
+def fetch_adelantos_grandes(desde: str | None = None, hasta: str | None = None) -> list[dict]:
+    return fetch_serie(ID_ADELANTOS_GRANDES, desde, hasta)
 
 
 def fetch_tamar(desde: str | None = None, hasta: str | None = None) -> list[dict]:

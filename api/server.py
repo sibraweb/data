@@ -11,6 +11,7 @@ dependen de un único dato mensual, ver notas de cada grupo):
 
   DIARIO (mercado — cambian de verdad día a día):
     DOLAR, CAUCION, RIESGO_PAIS, MERVAL, BADLAR, TAMAR, BAIBAR, DEPOSITOS_30D,
+    USO_JUSTICIA, TM20, ADELANTOS_GRANDES,
     ADELANTOS_CTA_CTE, PRESTAMOS_PERSONALES, TIM
 
   MENSUAL, ~día 18 (derivan todas de un único dato mensual — IPC o RIPTE —
@@ -68,6 +69,9 @@ SERIES = {
     "inflacion_indec": {"tab": "INFLACION_INDEC", "fecha_col": "FECHA", "valor_col": "VALOR"},
     "badlar": {"tab": "BADLAR", "fecha_col": "FECHA", "valor_col": "VALOR"},
     "tamar": {"tab": "TAMAR", "fecha_col": "FECHA", "valor_col": "VALOR"},
+    "uso_justicia": {"tab": "USO_JUSTICIA", "fecha_col": "FECHA", "valor_col": "VALOR"},
+    "tm20": {"tab": "TM20", "fecha_col": "FECHA", "valor_col": "VALOR"},
+    "adelantos_grandes": {"tab": "ADELANTOS_GRANDES", "fecha_col": "FECHA", "valor_col": "VALOR"},
     "baibar": {"tab": "BAIBAR", "fecha_col": "FECHA", "valor_col": "VALOR"},
     "depositos_30d": {"tab": "DEPOSITOS_30D", "fecha_col": "FECHA", "valor_col": "VALOR"},
     "adelantos_cta_cte": {"tab": "ADELANTOS_CTA_CTE", "fecha_col": "FECHA", "valor_col": "VALOR"},
@@ -93,6 +97,11 @@ SERIES_BCRA_DIARIAS = [
     ("BADLAR", bcra.fetch_badlar), ("TAMAR", bcra.fetch_tamar), ("BAIBAR", bcra.fetch_baibar),
     ("DEPOSITOS_30D", bcra.fetch_depositos_30d), ("ADELANTOS_CTA_CTE", bcra.fetch_adelantos_cta_cte),
     ("PRESTAMOS_PERSONALES", bcra.fetch_prestamos_personales),
+    # Las tres de MORA (Juan, 2026-09-10). ⚠ USO_JUSTICIA es un INDICE
+    # acumulado como el CER, NO una TNA: al 10/09 vale 26.984,26.
+    ("USO_JUSTICIA", bcra.fetch_uso_justicia),
+    ("TM20", bcra.fetch_tm20),
+    ("ADELANTOS_GRANDES", bcra.fetch_adelantos_grandes),
 ]
 SERIES_BCRA_MENSUALES = [
     ("CER", bcra.fetch_cer), ("UVA", bcra.fetch_uva), ("UVI", bcra.fetch_uvi),
