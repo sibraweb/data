@@ -570,21 +570,34 @@ MATERIALES_CURADOS = {
         "CEMENTO PORTLAND X 25 KG. (LOMA NEGRA)-25",
         "HIERRO Aº TORS.Ø 10-BR X 12MT.",
         "LADRILLO HUECO DE 1º 18X18X25-5",
-        # ── de OTROS_MAT.xlsx, cargados el 13/09/2026 ────────────────────────
-        # ⚠ EL CAÑO YA APARECIO, y no donde se lo buscaba. El comentario que
-        # estaba acá decia que el caño Awaduct 110 x 4 mts lo habia pedido Juan
-        # y no figuraba en ninguna cotizacion — se lo buscaba en SERINAR, cuyos
-        # 20 items son todos accesorios de 50/63 mm de un solo dia (2022-12-07).
-        # Estaba en `RAW/MATERIALES/OTROS_MAT.xlsx`, el archivo hermano de
-        # CONST_2.xlsx que sembro los tres de arriba y que NUNCA se habia
-        # cargado. Ver `origen='HISTORICO_OTROS'`.
-        "CABLE UNIPOLAR 2,5 MM2",
-        "PLACA DE DURLOCK 9,5 MM",
-        "CAÑO 110 AWADUCT X 4 MTS",
     ],
-    # ⚠ SERINAR (122) sigue sin lista curada a proposito: sus 20 items tienen
-    # UN solo precio cada uno, todos del 2022-12-07. Sirven para comparar un
-    # punto, no para graficar una serie — por eso la pantalla decia «sin datos».
+    # ── de OTROS_MAT.xlsx, cargados el 13/09/2026 ───────────────────────────
+    #
+    # ⚠ EL CAÑO APARECIO, y no donde se lo buscaba. El comentario que estaba
+    # acá decia que el caño Awaduct 110 x 4 mts lo habia pedido Juan y no
+    # figuraba en ninguna cotizacion — se lo buscaba en los items de SERINAR,
+    # que son todos accesorios de 50/63 mm de un solo dia (2022-12-07). Estaba
+    # en `RAW/MATERIALES/OTROS_MAT.xlsx`, el archivo hermano de CONST_2.xlsx
+    # que sembro cemento/hierro/ladrillo y que NUNCA se habia cargado.
+    #
+    # ⚠ CADA ITEM VA CON SU PROVEEDOR, y los definio Juan (13/09/2026): el
+    # cable es de Electro Punto, la placa de Construcciones en Seco y el caño
+    # de Serinar. Al cargarlos quedaron los tres bajo Ceramica Norte, que es de
+    # donde salio el Excel — pero el Excel es el relevamiento de Juan, no una
+    # lista de ese proveedor.
+    #
+    # ⚠ «ORLANDO» ES CONSTRUCCIONES EN SECO CORRIENTES (id 21). Es el nombre
+    # con el que se la llama en la obra; lo dice `identificar_entidades.py`.
+    # Hay ademas una entidad `390 ORLANDO` sin CUIT y sin vincular a la 21:
+    # duplicado por nombre de obra, pendiente de fusionar.
+    "206": ["CABLE UNIPOLAR 2,5 MM2"],           # Electro Punto
+    "21":  ["PLACA DE DURLOCK 9,5 MM"],          # Construcciones en Seco (Orlando)
+    "122": ["CAÑO 110 AWADUCT X 4 MTS"],         # Serinar
+    #
+    # ⚠ La lista curada de Serinar deja AFUERA sus 20 accesorios a proposito:
+    # tienen UN solo precio cada uno, todos del 2022-12-07. Sirven para
+    # comparar un punto, no para graficar una serie — por eso la pantalla
+    # decia «sin datos» cuando se los elegia.
 }
 
 # El "proveedor" UOCRA es ficticio: lo usa Obra para meter la mano de obra en
