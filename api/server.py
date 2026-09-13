@@ -32,6 +32,7 @@ dependen de un único dato mensual, ver notas de cada grupo):
 from __future__ import annotations
 
 import datetime as dt
+import csv
 import os
 import sys
 from pathlib import Path
@@ -43,6 +44,7 @@ from flask_cors import CORS
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import cargar_indec_op
 import db
 import descuento_certificados as dcert
 import sheets
@@ -52,8 +54,8 @@ from rem_estimaciones import construir_curva_mensual, resumen_por_anio
 from resumen import resumen_serie
 from resumen import variacion as calcular_variacion
 from scrapers import (alquileres, argentinadatos, bcra, bcra_rem, camarco, cauciones,
-                      dolares, icc, investing, mav, ripte, salarios, smvm, tim,
-                      uocra, yahoo)
+                      dolares, icc, indec_obra_publica, investing, mav, ripte,
+                      salarios, smvm, tim, uocra, yahoo)
 
 load_dotenv()
 
@@ -1282,6 +1284,34 @@ def refrescar_icc():
         print(f"[scheduler] ICC_{clave} +{n} filas")
 
 
+def refrescar_indec_op():
+    """La base de redeterminación de obra pública: 436 índices POR INSUMO.
+
+    Es otra cosa que `refrescar_icc`, que trae los cuatro capítulos agregados.
+    Ningún decreto redetermina con eso: piden el índice del insumo —"acero
+    aletado", "caños de PVC", "alquiler de retroexcavadora"—. Ver
+    SIBRA_SERVER/MDs/REDETERMINACION__DISENO.md.
+
+    Va a `indec_op_conceptos` / `indec_op_valores` / `indec_op_revisiones`, no a
+    `series_valores`: son 436 conceptos con código CPC, jerarquía y origen
+    nacional/importado, y meterlos ahí dejaba la pantalla con 470 opciones.
+    """
+    filas = indec_obra_publica.fetch()
+    if not filas:
+        # El .xls sigue ahí pero no se pudo leer: cambió el formato. Vale
+        # gritarlo — con la tabla vacía nadie liquida nada, pero con la tabla
+        # vieja y sin aviso se liquida con índices del mes pasado.
+        raise RuntimeError("INDEC_OP: el .xls no devolvió ninguna fila — cambió el formato")
+
+    hoy = dt.date.today().isoformat()
+    nuevos, corregidas, confirmadas = cargar_indec_op.registrar_revision(filas, hoy)
+    _, cambiadas = cargar_indec_op.guardar(filas)
+    ultimo = max(f["periodo"] for f in filas)
+    print(f"[scheduler] INDEC_OP último período {ultimo} · {cambiadas} valores "
+          f"cambiados · {nuevos} nuevos · {corregidas} corregidos por INDEC · "
+          f"{confirmadas} pasaron a definitivo sin cambiar")
+
+
 def refrescar_alquileres():
     serie = alquileres.fetch_alquileres()
     headers = ["PRECIO_2_AMBIENTES", "PRECIO_3_AMBIENTES", "PROMEDIO"]
@@ -1532,6 +1562,7 @@ FUENTES_MANUALES = {
     "uocra": refrescar_uocra,
     "salarios": refrescar_salarios,
     "icc": refrescar_icc,
+    "indec_op": refrescar_indec_op,
     "alquileres": refrescar_alquileres,
     "publicar_resumen": publicar_resumen,
 }
@@ -1588,6 +1619,13 @@ def iniciar_scheduler():
     sched.add_job(refrescar_salarios, "interval", days=7)
     sched.add_job(refrescar_icc, "interval", days=7)
 
+    # INDEC publica el ICC alrededor del día 18 del mes siguiente, y el .xls de
+    # obra pública se actualiza junto o poco después. Se chequea varios días
+    # porque no hay fecha fija: una corrida sin novedades tarda 10 s y no
+    # escribe nada, así que insistir sale más barato que llegar tarde con la
+    # base de la que salen las redeterminaciones.
+    sched.add_job(refrescar_indec_op, "cron", day="18,21,24,27", hour=10)
+
     # CAMARCO publica su dato del mes recién después del día 25 — antes de
     # eso pedirlo no trae nada nuevo. Se chequea dos veces por si el día 25
     # cae en fin de semana/feriado y el dato sale un poco más tarde.
@@ -1623,6 +1661,128 @@ def estaticos_shared(archivo):
 # armando en indices esto, y cuando esta armado llamamos los calculos desde
 # obra»*. Por eso la REGLA vive aca: si Obra recibe el factor ya calculado, no
 # hay forma de que un certificado salga con el mes corrido.
+
+# ── Mano de obra: las tres bases de hora ───────────────────────────────────
+#
+# ⚠ LEE LOS CSV DE DRIVE, NO LA BASE. El coeficiente de CAMARCO y los topes de
+# ARCA se guardan en `H:\My Drive\web_sibra\indices` por decision de Juan
+# (13/09/2026): aca no hace falta velocidad de calculo, hace falta tenerlo
+# disponible. Los jornales si salen de Supabase, porque ya estaban ahi.
+#
+# ⚠ SI FALTA UN CSV SE DEVUELVE ESA PARTE VACIA, no un 500: la pantalla tiene
+# que poder mostrar los jornales aunque nadie haya corrido todavia el export
+# del coeficiente, y decir cual falta.
+
+DIR_DRIVE = Path(r"H:\My Drive\web_sibra\indices")
+
+CATEGORIAS_MO = [
+    ("AYUDANTE", "Ayudante"),
+    ("MEDIO_OFICIAL", "Medio Oficial"),
+    ("OFICIAL", "Oficial"),
+    ("OFICIAL_ESPECIALIZADO", "Oficial Especializado"),
+]
+
+
+def _leer_csv_drive(nombre: str) -> list[dict]:
+    ruta = DIR_DRIVE / nombre
+    if not ruta.exists():
+        return []
+    try:
+        with open(ruta, encoding="utf-8-sig", newline="") as fh:
+            return list(csv.DictReader(fh, delimiter=";"))
+    except Exception:
+        return []
+
+
+def _num(x):
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
+
+
+@app.get("/api/manoobra")
+def mano_de_obra():
+    """Hora oficial y hora CAMARCO por categoria, mas el coeficiente y los topes.
+
+    `periodo` en YYYY-MM (por defecto, el ultimo mes con jornales).
+
+    ⚠ LA HORA CAMARCO SE MULTIPLICA POR LAS HORAS EFECTIVAMENTE TRABAJADAS. El
+    coeficiente ya tiene adentro el item "salarios pagados por tiempos no
+    trabajados" (la lluvia, los feriados), asi que prorratear el costo de una
+    quincena entre las horas trabajadas cuenta la lluvia dos veces. La pantalla
+    lo dice, y queda dicho aca tambien para quien llame al endpoint.
+    """
+    periodo = (request.args.get("periodo") or "").strip()
+    try:
+        jornales = db.leer_serie_ancha("UOCRA")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 503
+    if not jornales:
+        return jsonify({"error": "no hay jornales de UOCRA cargados"}), 404
+
+    if len(periodo) == 7:
+        candidatos = [x for x in jornales if (x.get("FECHA") or "")[:7] <= periodo]
+    else:
+        candidatos = jornales
+    fila = candidatos[-1] if candidatos else None
+    if not fila:
+        return jsonify({"error": "sin jornales para ese mes o anteriores",
+                        "periodo": periodo}), 404
+
+    # el coeficiente vigente a ese mes, del grupo de obreros
+    coef, items = None, []
+    mes = (fila.get("FECHA") or "")[:7]
+    cs = [c for c in _leer_csv_drive("camarco_cargas_sociales_coeficiente.csv")
+          if c.get("grupo") == "MANO_DE_OBRA_DIRECTA"
+          and (c.get("vigencia") or "")[:7] <= mes]
+    if cs:
+        c = sorted(cs, key=lambda x: x["vigencia"])[-1]
+        coef = {
+            "grupo": c["grupo"], "vigencia": c["vigencia"],
+            "publicado": c.get("publicado"),
+            "coeficiente_pct": _num(c.get("coeficiente_pct")),
+            "factor": _num(c.get("factor")),
+            "art_cuota_pactada_pct": _num(c.get("art_cuota_pactada_pct")),
+            "suma_controlada": c.get("suma_controlada"),
+        }
+        items = [{
+            "item": i.get("item"), "concepto": i.get("concepto"),
+            "incidencia_pct": _num(i.get("incidencia_pct")), "clase": i.get("clase"),
+        } for i in _leer_csv_drive("camarco_cargas_sociales_items.csv")
+            if i.get("grupo") == c["grupo"] and i.get("vigencia") == c["vigencia"]]
+        coef["items"] = items
+
+    factor = (coef or {}).get("factor")
+    horas = []
+    for col, nombre in CATEGORIAS_MO:
+        b = _num(fila.get(col))
+        horas.append({
+            "categoria": nombre, "columna": col, "hora_oficial": b,
+            # ⚠ None y no 0 si falta el coeficiente: un cero se lee como "es
+            # gratis" y un guion se lee como "no lo sabemos".
+            "hora_camarco": (b * factor) if (b is not None and factor) else None,
+        })
+
+    topes = [{
+        "vigencia_desde": t.get("vigencia_desde"),
+        "minima": _num(t.get("minima")), "maxima": _num(t.get("maxima")),
+        "resoluciones": t.get("resoluciones"), "leido_el": t.get("leido_el"),
+    } for t in _leer_csv_drive("arca_bases_imponibles.csv")]
+    topes = sorted(topes, key=lambda t: t["vigencia_desde"] or "")[-6:]
+
+    return jsonify({
+        "periodo_jornales": mes,
+        "zona": "A",   # ⚠ la serie es Zona A unicamente, ver el manual
+        "horas": horas,
+        "coeficiente": coef,
+        "topes": topes,
+        "faltan": [n for n, hay in (
+            ("camarco_cargas_sociales_coeficiente.csv", bool(coef)),
+            ("arca_bases_imponibles.csv", bool(topes)),
+        ) if not hay],
+    })
+
 
 @app.get("/api/redet/series")
 def redet_series():

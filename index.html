@@ -76,6 +76,57 @@
   .tarjeta.vieja .t-valor { color: var(--gray-700); }
   .grupo-tarjetas { margin-bottom: 16px; }
   .grupo-tarjetas > h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--gray-700); margin: 0 0 8px; }
+
+  /* `.campos` se usaba sin estar definida: los campos de Mora quedaban uno
+     abajo del otro en una columna angosta. Es la fila de campos, igual que
+     .controles. */
+  .campos { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+
+  .cert-tabla-wrap { max-height: 420px; overflow: auto; margin-top: 12px;
+    background: var(--white); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .cert-tabla-wrap table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .cert-tabla-wrap th { position: sticky; top: 0; background: var(--white); z-index: 1;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--gray-700);
+    padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--gray-300); }
+  .cert-tabla-wrap td { padding: 6px 12px; text-align: right; white-space: nowrap;
+    border-bottom: 1px solid rgba(0,0,0,.05); font-variant-numeric: tabular-nums; }
+  .cert-tabla-wrap th:first-child, .cert-tabla-wrap td:first-child { text-align: left; }
+  /* ⚠ EL TINTE ES DEL REGIMEN Y EL BORDE ES DEL CAMBIO — son dos preguntas
+     distintas y antes el amarillo contestaba las dos a medias. El tinte dice
+     "bajo que regla se calculo este dia"; el borde grueso dice "aca cambio la
+     regla". Con 1.478 filas, el que audita busca el borde; el que lee una
+     fila suelta mira el tinte. El color sale del motor (`f.color`), no de una
+     tabla repetida aca: si manana entra un cuarto regimen, la pantalla lo
+     pinta sola. */
+  .cert-tabla-wrap tr[data-reg] td:first-child { border-left: 4px solid var(--c, transparent); }
+  .cert-tabla-wrap tr.cambio td { border-top: 2px solid var(--c, #b7791f); font-weight: 600; }
+  .cert-tabla-wrap tr.cambio td:first-child::after {
+    content: ' ← cambia el régimen'; font-size: 10.5px; font-weight: 600; color: var(--c, #b7791f); }
+  .cert-tabla-wrap tr.sinregimen td { background: rgba(200,0,0,.06); color: var(--gray-700); }
+
+  /* Leyenda de regimenes: una linea por tramo, con la barra de su color a la
+     izquierda. Es la respuesta a "de donde sale la tasa", y va ARRIBA del
+     resultado — se lee antes del numero, no despues de que alguien pregunte. */
+  .cert-tramo { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px;
+    background: var(--white); border-radius: 6px; margin-bottom: 6px;
+    border-left: 5px solid var(--c, var(--gray-300)); font-size: 12.5px; line-height: 1.45; }
+  .cert-tramo .t-regla { font-weight: 700; color: var(--c, var(--ink)); }
+  .cert-tramo .t-fuente { color: var(--gray-700); font-size: 11.5px; }
+  .cert-tramo .t-cifra { margin-left: auto; text-align: right; white-space: nowrap;
+    font-variant-numeric: tabular-nums; }
+  .cert-tramo .t-sinconf { display: inline-block; background: rgba(200,0,0,.10);
+    color: #a01010; border-radius: 4px; padding: 1px 6px; font-size: 10.5px; font-weight: 700; }
+
+  /* Las dos lecturas del interes, lado a lado y del mismo tamano (ver el
+     comentario de `calcular` en descuento_certificados.py). */
+  .cert-lectura { flex: 1; min-width: 270px; border: 2px solid var(--c, var(--gray-300));
+    border-radius: 8px; padding: 14px; background: var(--white); }
+  .cert-lectura .l-tit { font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--c, var(--gray-700)); font-weight: 700; }
+  .cert-lectura .l-coef { font-size: 30px; font-weight: 700; margin: 6px 0;
+    font-variant-numeric: tabular-nums; }
+  .cert-lectura .l-plata { font-size: 19px; font-weight: 700; }
+  .cert-lectura .l-pie { font-size: 11.5px; color: var(--gray-700); margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -250,6 +301,16 @@ const VENTANAS = [
   { id: 'rem', nombre: 'Proyecciones (REM)', esRem: true },
   { id: 'obra', nombre: 'Cálculo de Obra', esObra: true },
   { id: 'mora', nombre: 'Mora y descuento', esMora: true },
+  // ⚠ Pestaña APARTE de Mora, no una tasa más de su menú: la conversión de
+  // TNA a tasa diaria es distinta (Banco Nación pasa por la TNM) y sobre
+  // cuatro años eso mueve hasta el 10 % del interés. Ver descuento_certificados.py.
+  { id: 'certificados', nombre: 'Descuento de certificados (BNA)', esCertificados: true },
+  // ⚠ Redeterminacion es pestaña propia y no una opcion de Calculo de Obra:
+  // aca el indice se PACTA en el contrato (CAMARCO con el cliente, UOCRA con
+  // el proveedor) y la cuenta la hace el backend, que es el que sabe la regla
+  // del mes anterior. Calculo de Obra estima; esto liquida.
+  { id: 'redet', nombre: 'Redeterminación', esRedet: true },
+  { id: 'manoobra', nombre: 'Mano de obra', esManoObra: true },
 ];
 
 // Financiamiento (pedido de Juan, 2026-08-09): qué se puede graficar.
@@ -312,6 +373,75 @@ function render() {
   ).join('');
 
   ventanasEl.innerHTML = VENTANAS.map((v, i) => {
+    if (v.esRedet) {
+      return `
+        <section class="ventana${i === 0 ? ' active' : ''}" id="ventana-${v.id}">
+          <h3>Salto de redeterminación</h3>
+          <p class="nota">El índice se pacta en el contrato. La cuenta la hace el
+            backend, que aplica <strong>el índice del mes anterior en las dos
+            puntas</strong>: base abril → agosto busca marzo → julio.</p>
+          <div class="controles">
+            <div class="campo"><label>Índice pactado</label><select id="redet-serie"></select></div>
+            <div class="campo"><label>Columna</label><select id="redet-columna"></select></div>
+            <div class="campo"><label>Mes base del contrato</label><input type="month" id="redet-base"></div>
+            <div class="campo"><label>Mes a redeterminar</label><input type="month" id="redet-mes"></div>
+            <div class="campo"><label>Monto a ajustar</label><input type="number" id="redet-monto" placeholder="opcional" step="0.01" style="width:140px"></div>
+            <div class="campo"><label>&nbsp;</label><button type="button" id="redet-calcular">Calcular</button></div>
+          </div>
+          <div class="estado" id="estado-${v.id}"></div>
+          <div id="redet-resultado"></div>
+          <div class="tabla-wrap">
+            <table class="tabla-resumen">
+              <thead><tr><th>Índice pactable</th><th>Columnas</th><th>Llega hasta</th></tr></thead>
+              <tbody id="redet-series-tbody"></tbody>
+            </table>
+          </div>
+          <p class="nota">⚠ Mirá <em>Llega hasta</em> ANTES de firmar: un contrato
+            con un índice que dejó de publicarse no se puede redeterminar.</p>
+        </section>`;
+    }
+
+    if (v.esManoObra) {
+      return `
+        <section class="ventana${i === 0 ? ' active' : ''}" id="ventana-${v.id}">
+          <h3>Las tres bases de hora</h3>
+          <p class="nota"><strong>Hora oficial</strong> es el básico publicado.
+            <strong>Hora CAMARCO</strong> es ese básico por el coeficiente de
+            incidencia de cargas sociales. <strong>Hora recibo</strong> todavía no
+            existe: es la liquidación real, para el subcontrato exacto.</p>
+          <div class="controles">
+            <div class="campo"><label>Mes</label><input type="month" id="mo-mes"></div>
+            <div class="campo"><label>&nbsp;</label><button type="button" id="mo-calcular">Calcular</button></div>
+          </div>
+          <div class="estado" id="estado-${v.id}"></div>
+          <div class="tabla-wrap">
+            <table class="tabla-resumen">
+              <thead><tr><th>Categoría</th><th>Hora oficial</th><th>Hora CAMARCO</th></tr></thead>
+              <tbody id="mo-horas-tbody"></tbody>
+            </table>
+          </div>
+          <h3>El coeficiente, renglón por renglón</h3>
+          <div class="tabla-wrap">
+            <table class="tabla-resumen">
+              <thead><tr><th></th><th>Concepto</th><th>Incidencia %</th></tr></thead>
+              <tbody id="mo-items-tbody"></tbody>
+            </table>
+          </div>
+          <p class="nota">⚠ Las horas hábiles YA están adentro: el item
+            «salarios pagados por tiempos no trabajados» es la lluvia y los
+            feriados. Se multiplica por las <strong>horas efectivamente
+            trabajadas</strong> — prorratear una quincena entre las horas
+            trabajadas cuenta la lluvia dos veces.</p>
+          <h3>Topes de la base imponible (ARCA)</h3>
+          <div class="tabla-wrap">
+            <table class="tabla-resumen">
+              <thead><tr><th>Vigencia desde</th><th>Mínima</th><th>Máxima</th><th>Resolución</th></tr></thead>
+              <tbody id="mo-topes-tbody"></tbody>
+            </table>
+          </div>
+        </section>`;
+    }
+
     if (v.esResumen) {
       return `
         <section class="ventana${i === 0 ? ' active' : ''}" id="ventana-${v.id}">
@@ -497,10 +627,12 @@ function render() {
     return `
       <section class="ventana${i === 0 ? ' active' : ''}" id="ventana-${v.id}">
         <div class="controles">
+          ${v.esCertificados ? '' : `
           <div class="campo">
             <label>Rango</label>
             ${crearSelect(`sel-rango-${v.id}`, RANGOS, 'label', 'value')}
           </div>
+          `}
           ${v.esMora ? `
             <!-- ── MORA Y DESCUENTO DE CERTIFICADOS ──────────────────────
                  Juan, 2026-09-10: «vamos a poner considerar interés simple,
@@ -534,6 +666,42 @@ function render() {
             </div>
             <div id="mora-rango" class="nota"></div>
             <div id="mora-resultado"></div>
+          ` : ''}
+          ${v.esCertificados ? `
+            <!-- ── DESCUENTO DE CERTIFICADOS DE OBRA PÚBLICA ──────────────
+                 Ley 13.064 art. 48: la tasa la fija el Banco Nación, no
+                 CAMARCO. CAMARCO compila la planilla y la deja tras un login
+                 de socios; acá se reconstruye con TAMAR del BCRA + el spread
+                 del BNA, que son públicos los dos.
+
+                 ⚠ CAPITALIZAR / NO CAPITALIZAR ES UN BOTÓN, NO UN CHECK
+                 ESCONDIDO: es la decisión que más mueve el número después de
+                 las fechas, y tiene que verse cuál está elegida sin abrir
+                 nada. -->
+            <div class="campos">
+              <div class="campo"><label>Importe del certificado</label>
+                <input type="number" id="cert-monto" step="0.01" placeholder="0,00" style="width:180px"></div>
+              <div class="campo"><label>Fecha inicial</label>
+                <input type="date" id="cert-desde"></div>
+              <div class="campo"><label>Fecha final</label>
+                <input type="date" id="cert-hasta"></div>
+              <div class="campo"><label>Tomador</label>
+                <select id="cert-mipyme">
+                  <option value="0">No MiPyME / Grandes Inversores</option>
+                  <option value="1">MiPyME</option>
+                </select></div>
+              <div class="campo"><label>Qué se calcula</label>
+                <select id="cert-modo">
+                  <option value="mora">Mora — me pagaron tarde</option>
+                  <option value="descuento">Descuento — cobrar antes</option>
+                </select></div>
+              <!-- ⚠ ACA HABIA UN BOTON CAPITALIZAR / NO CAPITALIZAR, Y SE SACO.
+                   No porque estorbara: porque elegir escondia. La lectura que
+                   corresponde depende del pliego, y con un boton el que mira
+                   la pantalla veia UN numero sin enterarse de que habia otro.
+                   Sobre 2022-2026 los dos difieren en 300 %. Ahora salen los
+                   dos, del mismo tamano, y elegir es del que lee. -->
+            </div>
           ` : ''}
           ${v.esMateriales ? `
             <div class="campo">
@@ -580,7 +748,7 @@ function render() {
               <label>Serie</label>
               ${crearSelect(`sel-rem-${v.id}`, REM_SERIES, 'label', 'value')}
             </div>
-          ` : v.esFinanciamiento ? '' : `
+          ` : (v.esFinanciamiento || v.esCertificados) ? '' : `
             <div class="campo">
               <label>Ajustar por</label>
               ${crearSelect(`sel-ajuste-${v.id}`, INDICES_AJUSTE, 'label', 'value')}
@@ -597,12 +765,24 @@ function render() {
         </div>
         ${v.esAlquiler ? `<p class="estado" style="color:var(--red)">Fuente discontinuada (Buenos Aires Data) — no hay datos después de agosto 2019. Sirve como referencia histórica, no para decisiones con precios de hoy.</p>` : ''}
         ${v.esFinanciamiento ? `<div id="fin-tarjetas-${v.id}"></div>` : ''}
+        ${v.esCertificados ? `
+          <!-- ⚠ FUERA de .controles: .controles es un flex de campos y estos
+               son la salida, no un control más. Adentro, la tabla de 1.500
+               filas entraba como ítem del flex y se superponía con las
+               tarjetas del resultado. -->
+          <div id="cert-regimenes" class="nota"></div>
+          <div id="cert-tramos"></div>
+          <div id="cert-resultado"></div>
+          <div id="cert-tabla"></div>
+        ` : ''}
         <div class="estado" id="estado-${v.id}"></div>
+        ${v.esCertificados ? '' : `
         <div class="chart-box"><canvas id="chart-${v.id}"></canvas></div>
         <div class="leyenda-tramos" id="leyenda-${v.id}" style="display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;font-size:12px;color:var(--ink)"></div>
+        `}
         ${v.esRem ? `<div id="rem-extra-${v.id}"></div>` : ''}
         ${v.esUocra ? `<div id="uocra-vigentes"></div>` : ''}
-        ${(!v.esRem && !v.esFinanciamiento) ? `
+        ${(!v.esRem && !v.esFinanciamiento && !v.esCertificados) ? `
           <h3 style="margin-top:20px">Calcular entre dos fechas</h3>
           <p class="estado" style="margin-top:0">Calcula sobre la MISMA serie que está graficada arriba (con el ajuste elegido). Si la serie es mensual y la fecha pedida cae en medio de un mes, se usa el último dato publicado en o antes de esa fecha (ej. IPC del 3 de abril = el dato de fin de marzo).</p>
           <div class="controles">
@@ -1408,7 +1588,10 @@ async function cargarVentana(v) {
     return;
   }
 
+  if (v.esRedet) { await iniciarRedet(); return; }
+  if (v.esManoObra) { await iniciarManoObra(); return; }
   if (v.esMora) { await iniciarMora(); return; }
+  if (v.esCertificados) { await iniciarCertificados(); return; }
 
   if (v.esObra) {
     try {
@@ -1787,6 +1970,149 @@ async function init() {
    cual prefiero: es cuanto hay entre uno y otro. */
 let _moraTasas = [];
 
+// ── Redeterminacion ────────────────────────────────────────────────────────
+//
+// ⚠ LA REGLA DEL MES ANTERIOR NO SE APLICA ACA. El front manda los meses del
+// CONTRATO y el backend busca el mes anterior en las dos puntas. Si la pantalla
+// tambien la aplicara, se correria dos meses; y si la aplicara la pantalla en
+// vez del backend, cada consumidor nuevo tendria que volver a acordarse.
+
+let _redetSeries = [];
+
+async function iniciarRedet() {
+  const est = document.getElementById('estado-redet');
+  const selSerie = document.getElementById('redet-serie');
+  if (!selSerie) return;
+  if (!_redetSeries.length) {
+    try {
+      const r = await pedir('/api/redet/series');
+      _redetSeries = (await r.json()).series || [];
+    } catch (e) {
+      est.textContent = msgFalla(e); est.classList.add('error'); return;
+    }
+  }
+  selSerie.innerHTML = _redetSeries.map(x =>
+    `<option value="${x.serie}">${x.nombre}</option>`).join('');
+  selSerie.onchange = pintarColumnasRedet;
+  pintarColumnasRedet();
+
+  document.getElementById('redet-series-tbody').innerHTML = _redetSeries.map(x => {
+    // ⚠ un indice que dejo de publicarse se marca: es lo que hay que ver ANTES
+    // de firmar, no cuando hay que emitir el certificado
+    const viejo = x.hasta && x.hasta < new Date(Date.now() - 120 * 864e5).toISOString().slice(0, 10);
+    return `<tr${viejo ? ' style="opacity:.6"' : ''}>
+      <td>${x.nombre}</td>
+      <td>${x.columnas.map(c => c.columna).filter(c => c !== '_').join(', ') || '—'}</td>
+      <td>${x.hasta || '—'}${viejo ? ' ⚠ atrasado' : ''}</td></tr>`;
+  }).join('');
+
+  const hoy = new Date();
+  const mes = document.getElementById('redet-mes');
+  if (mes && !mes.value) mes.value = hoy.toISOString().slice(0, 7);
+  document.getElementById('redet-calcular').onclick = calcularRedet;
+  est.textContent = `${_redetSeries.length} índices pactables.`;
+}
+
+function pintarColumnasRedet() {
+  const x = _redetSeries.find(y => y.serie === document.getElementById('redet-serie').value);
+  const sel = document.getElementById('redet-columna');
+  if (!x) { sel.innerHTML = ''; return; }
+  sel.innerHTML = x.columnas.map(c =>
+    `<option value="${c.columna}">${c.columna === '_' ? '(única)' : c.columna}</option>`).join('');
+}
+
+async function calcularRedet() {
+  const est = document.getElementById('estado-redet');
+  const out = document.getElementById('redet-resultado');
+  est.classList.remove('error');
+  const q = new URLSearchParams({
+    serie: document.getElementById('redet-serie').value,
+    columna: document.getElementById('redet-columna').value,
+    base: document.getElementById('redet-base').value,
+    redet: document.getElementById('redet-mes').value,
+  });
+  if (!q.get('base') || !q.get('redet')) {
+    est.textContent = 'Faltan los dos meses del contrato.'; return;
+  }
+  out.innerHTML = '';
+  try {
+    const r = await pedir(`/api/redet/salto?${q}`);
+    const d = await r.json();
+    if (d.error) {
+      est.classList.add('error');
+      est.textContent = `${d.error}${d.faltan ? ' — falta ' + d.faltan.join(', ') : ''}`;
+      return;
+    }
+    const monto = parseFloat(document.getElementById('redet-monto').value);
+    const ajustado = isFinite(monto) ? monto * d.factor : null;
+    out.innerHTML = `
+      <div class="tabla-wrap"><table class="tabla-resumen">
+        <tbody>
+          <tr><td>Regla aplicada</td><td colspan="2">${d.regla}</td></tr>
+          <tr><td>Punta base</td><td>contrato ${d.mes_contrato_base} → índice <strong>${d.base.periodo}</strong></td>
+              <td>${fmtNum(d.base.indice)}${d.base.provisorio ? ' <em>provisorio</em>' : ''}</td></tr>
+          <tr><td>Punta de redeterminación</td><td>contrato ${d.mes_contrato_redet} → índice <strong>${d.redet.periodo}</strong></td>
+              <td>${fmtNum(d.redet.indice)}${d.redet.provisorio ? ' <em>provisorio</em>' : ''}</td></tr>
+          <tr><td><strong>Factor</strong></td><td></td><td><strong>${d.factor.toFixed(6)}</strong></td></tr>
+          <tr><td>Variación</td><td></td><td>${fmtPct(d.variacion * 100)}</td></tr>
+          ${ajustado !== null ? `<tr><td><strong>Monto ajustado</strong></td>
+              <td>${fmtNum(monto)} × ${d.factor.toFixed(6)}</td>
+              <td><strong>${fmtNum(ajustado)}</strong></td></tr>` : ''}
+        </tbody></table></div>
+      ${(d.avisos || []).map(a => `<p class="nota">⚠ ${a}</p>`).join('')}`;
+    est.textContent = d.alguna_punta_provisoria
+      ? 'Calculado. Una punta es PROVISORIA: se liquida igual, pero hay que controlarlo cuando la fuente la cierre.'
+      : 'Calculado. Las dos puntas son definitivas.';
+  } catch (e) {
+    est.classList.add('error'); est.textContent = msgFalla(e);
+  }
+}
+
+// ── Mano de obra ──────────────────────────────────────────────────────────
+
+async function iniciarManoObra() {
+  const est = document.getElementById('estado-manoobra');
+  const mes = document.getElementById('mo-mes');
+  if (!mes) return;
+  if (!mes.value) mes.value = new Date().toISOString().slice(0, 7);
+  document.getElementById('mo-calcular').onclick = calcularManoObra;
+  await calcularManoObra();
+}
+
+async function calcularManoObra() {
+  const est = document.getElementById('estado-manoobra');
+  est.classList.remove('error');
+  const mes = document.getElementById('mo-mes').value;
+  try {
+    const r = await pedir(`/api/manoobra?periodo=${mes}`);
+    const d = await r.json();
+    if (d.error) { est.classList.add('error'); est.textContent = d.error; return; }
+
+    document.getElementById('mo-horas-tbody').innerHTML = d.horas.map(h => `
+      <tr><td>${h.categoria}</td>
+          <td>${h.hora_oficial === null ? '—' : fmtNum(h.hora_oficial)}</td>
+          <td>${h.hora_camarco === null ? '—' : fmtNum(h.hora_camarco)}</td></tr>`).join('')
+      || '<tr><td colspan="3">Sin jornales para ese mes.</td></tr>';
+
+    document.getElementById('mo-items-tbody').innerHTML = (d.coeficiente?.items || []).map(i => `
+      <tr${i.clase !== 'sumando' ? ' style="font-weight:600"' : ''}>
+        <td>${i.item}</td><td>${i.concepto}</td><td>${fmtNum(i.incidencia_pct)}</td></tr>`).join('')
+      || '<tr><td colspan="3">Sin coeficiente cargado.</td></tr>';
+
+    document.getElementById('mo-topes-tbody').innerHTML = (d.topes || []).map(t => `
+      <tr><td>${t.vigencia_desde}</td><td>${fmtNum(t.minima)}</td>
+          <td>${fmtNum(t.maxima)}</td><td>${t.resoluciones || '—'}</td></tr>`).join('')
+      || '<tr><td colspan="4">Sin topes cargados.</td></tr>';
+
+    const c = d.coeficiente;
+    est.textContent = c
+      ? `Coeficiente ${fmtNum(c.coeficiente_pct)} % (factor ${c.factor}) · vigencia ${c.vigencia} · ${c.grupo}`
+      : 'Sin coeficiente: corré py api/exportar_drive.py --solo cargas';
+  } catch (e) {
+    est.classList.add('error'); est.textContent = msgFalla(e);
+  }
+}
+
 async function iniciarMora() {
   const sel = document.getElementById('mora-tasa');
   if (!sel) return;
@@ -1898,6 +2224,309 @@ function pintarMora(d, modo) {
       ${(d.avisos || []).length
         ? `<div class="nota error" style="margin-top:6px;">⚠ ${d.avisos.join(' · ')}</div>` : ''}
     </div>`;
+}
+
+/* ══ DESCUENTO DE CERTIFICADOS DE OBRA PÚBLICA ════════════════════
+   El motor esta en api/descuento_certificados.py. Aca solo se pide y se
+   muestra.
+
+   ⚠ ES OTRA PESTANA QUE MORA A PROPOSITO. La conversion de TNA a tasa
+   diaria del Banco Nacion pasa por la TNM (TNA*30/365, y de ahi la raiz
+   30) y no por TNA/365 como el resto. Sobre cuatro anios eso mueve hasta
+   el 10 % del interes: mezclarlas en un mismo menu de tasas garantizaba
+   que alguien un dia eligiera la equivocada sin enterarse.
+
+   ⚠ SE RECALCULA SOLO al tocar cualquier campo. Juan pidio «que
+   actualice»: si hay que apretar un boton, el numero en pantalla puede
+   ser de las fechas de antes y nadie lo nota. */
+/* ⚠ YA NO HAY `_certCapitalizar`: la pantalla muestra las DOS lecturas.
+   El endpoint sigue aceptando `capitalizar` (lo consume el ERP), pero acá no
+   se elige nada: `compuesto` y `simple` vienen los dos completos. */
+let _certRegimenes = {};   // id -> régimen, para poder decir de dónde sale la tasa
+
+async function iniciarCertificados() {
+  const monto = document.getElementById('cert-monto');
+  if (!monto) return;
+  const estado = document.getElementById('certificados-estado')
+    || document.getElementById('estado-certificados');
+  if (estado) estado.textContent = '';
+
+  const hasta = document.getElementById('cert-hasta');
+  if (hasta && !hasta.value) hasta.value = new Date().toISOString().slice(0, 10);
+
+  /* ⚠ Con debounce: `oninput` en el importe dispara una vuelta por tecla, y
+     la serie diaria son ~1.500 filas. Sin esto, tipear "10000000" son ocho
+     pedidos de los cuales siete se tiran. */
+  ['cert-monto', 'cert-desde', 'cert-hasta', 'cert-mipyme', 'cert-modo']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.onchange = el.oninput = certPedirCalculo;
+    });
+
+  /* ⚠ QUE REGLA RIGE Y DE DONDE SALE, ANTES DE CALCULAR. El spread no es
+     nuestro: lo fija el BNA. Si no se dice de donde viene, el primero que
+     pregunte «de donde sacaste el 6,50» deja el numero sin respaldo. */
+  try {
+    const r = await pedir('/api/descuento-certificados/regimenes');
+    const d = await r.json();
+    (d.regimenes || []).forEach(x => { _certRegimenes[x.id] = x; });
+    const series = Object.entries(d.series || {})
+      .map(([k, v]) => `${k} ${v.desde} → ${v.hasta}`).join(' · ');
+    document.getElementById('cert-regimenes').innerHTML =
+      `<b>Ley 13.064 art. 48 · decreto 13.477/56 art. 1º — la tasa la fija el Banco Nación.</b> `
+      + (d.publicada && d.publicada.desde
+        ? `Manda el <b>índice publicado por CAMARCO</b>, que va del ${d.publicada.desde} al ${d.publicada.hasta}. `
+          + `Más allá de esa fecha se reconstruye con BCRA + spread del BNA, y se avisa. `
+        : `⚠ No hay índice publicado cargado: todo se reconstruye. Correr <code>api/cargar_camarco_certificados.py</code>. `)
+      + `Series del BCRA en base: ${series}.`
+      + ((d.variantes_abiertas || []).length
+        ? `<br><span style="color:var(--gray-700)">Variantes que los avisos del BNA no definen y que quedaron fijadas porque son las que reproducen el dato público de CAMARCO: ${d.variantes_abiertas.join(' · ')}.</span>`
+        : '');
+  } catch (e) { /* se ve igual sin esto */ }
+
+  calcularCertificados();
+}
+
+function _num(n, dec) {
+  return (n == null) ? '—' : Number(n).toLocaleString('es-AR',
+    { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+
+let _certTimer = null;
+function certPedirCalculo() {
+  clearTimeout(_certTimer);
+  _certTimer = setTimeout(calcularCertificados, 350);
+}
+
+// La serie diaria no depende del importe: se cachea por el resto de la
+// consulta para no volver a bajar 1.500 filas cada vez que se toca el monto.
+let _certSerieCache = { clave: null, datos: null };
+
+async function calcularCertificados() {
+  const monto = document.getElementById('cert-monto').value;
+  const desde = document.getElementById('cert-desde').value;
+  const hasta = document.getElementById('cert-hasta').value;
+  const mipyme = document.getElementById('cert-mipyme').value;
+  const modo = document.getElementById('cert-modo').value;
+  const out = document.getElementById('cert-resultado');
+  const tabla = document.getElementById('cert-tabla');
+  if (!desde || !hasta) {
+    out.innerHTML = '<div class="nota">Poné la fecha inicial y la final.</div>';
+    document.getElementById('cert-tramos').innerHTML = '';
+    tabla.innerHTML = '';
+    return;
+  }
+  // La serie depende solo de fechas y tomador; el modo y capitalizar/no son
+  // lecturas del MISMO índice, no otra serie.
+  const qSerie = `desde=${desde}&hasta=${hasta}&mipyme=${mipyme}`;
+  const q = `${qSerie}&modo=${modo}`;
+  out.innerHTML = '<div class="nota">Calculando…</div>';
+  try {
+    const necesitaSerie = _certSerieCache.clave !== qSerie;
+    const [rc, rs] = await Promise.all([
+      pedir(`/api/descuento-certificados?monto=${encodeURIComponent(monto || 0)}&${q}`),
+      necesitaSerie ? pedir(`/api/descuento-certificados/serie?${qSerie}`) : null,
+    ]);
+    const d = await rc.json();
+    if (!rc.ok || d.error) {
+      out.innerHTML = `<div class="nota error">${d.error || 'No se pudo calcular.'}</div>`;
+      tabla.innerHTML = '';
+      return;
+    }
+    if (necesitaSerie) {
+      const s = await rs.json();
+      _certSerieCache = { clave: qSerie, datos: (rs.ok && !s.error) ? s : null };
+      tabla.innerHTML = _certSerieCache.datos
+        ? pintarTablaCertificados(_certSerieCache.datos) : '';
+    }
+    document.getElementById('cert-tramos').innerHTML = pintarTramos(d);
+    out.innerHTML = pintarCertificados(d);
+  } catch (e) {
+    out.innerHTML = `<div class="nota error">${e.message}</div>`;
+  }
+}
+
+/* ⚠ LA LEYENDA DE REGIMENES VA ANTES DEL NUMERO, NO DESPUES.
+   Juan, 2026-09-11: «poner en diferentes colores cada tasa que se tomaba en
+   la metodologia y de donde leer eso». Cada renglon contesta la frase
+   completa: a partir de tal dia se toma tal serie, leida tantos dias habiles
+   antes, mas tal spread del Banco Nacion, por tal norma. El color es el mismo
+   que despues tiene la fila en la tabla, asi que "este pedazo del coeficiente
+   lo puso esta regla" se ve sin leer nada.
+
+   ⚠ SE CRUZA `d.tramos` (lo que REALMENTE se uso en estas fechas) CON
+   `_certRegimenes` (la ficha completa de cada regimen). El primero sabe
+   cuantos dias y cuanto aporto; el segundo sabe la norma y la fuente.
+   Listar los regimenes sueltos mostraba tramos que el rango ni tocaba. */
+function pintarTramos(d) {
+  const t = d.tramos || [];
+  if (!t.length) return '';
+  const delCalculo = {};
+  (d.regimenes || []).forEach(r => { if (r.id) delCalculo[r.id] = r; });
+  const filas = t.map(x => {
+    const r = delCalculo[x.regimen_id] || _certRegimenes[x.regimen_id] || {};
+    const c = x.color || r.color || 'var(--gray-300)';
+    if (!x.regimen_id) {
+      return `<div class="cert-tramo" style="--c:${c}">
+        <div><span class="t-regla">Sin régimen</span> · ${x.desde} → ${x.hasta}
+          (${x.dias.toLocaleString('es-AR')} días)
+          <div class="t-fuente">Estos días NO capitalizan: el coeficiente está
+            incompleto. No se inventa una tasa para taparlos.</div></div></div>`;
+    }
+    /* El tramo publicado no tiene spread ni desfasaje que contar: no se
+       calculó, se leyó. Decirle "+ null p.p." sería inventarle una regla. */
+    if (x.regimen_id === 'publicada') {
+      return `<div class="cert-tramo" style="--c:${c}">
+        <div>
+          <span class="t-regla">Índice publicado</span>
+          · ${x.desde} → ${x.hasta} · ${x.dias.toLocaleString('es-AR')} días
+          <div>El índice T.E.M. que <b>publica CAMARCO</b>, leído tal cual: no se
+            reconstruye nada. Es el número que la contraparte puede mirar.</div>
+          <div class="t-fuente">${r.norma || ''} — ${r.fuente || ''}</div>
+        </div>
+        <div class="t-cifra">
+          <div>compuesto <b>${_num(x.coeficiente, 6)}</b></div>
+          <div style="color:var(--gray-700)">simple ${_num(x.coeficiente_sin_capitalizar, 6)}</div>
+          <div style="color:var(--gray-700);font-size:11px">TNA ${_num(x.tna_min, 2)} – ${_num(x.tna_max, 2)} %</div>
+        </div></div>`;
+    }
+    /* La frase que pidió Juan, armada con los campos del motor — no escrita a
+       mano acá, para que no se despegue de lo que efectivamente se calculó. */
+    const regla = `A partir del <b>${x.desde}</b> se toma <b>${r.base_detalle || x.base}</b>,`
+      + ` leída <b>${r.lag_habiles} días hábiles antes</b>,`
+      + ` más <b>${_num(x.spread_pp, 2)} p.p.</b> de spread del Banco Nación`
+      + (r.spread_pp_mipyme != null ? ` (MiPyME: + ${_num(r.spread_pp_mipyme, 2)} p.p.)` : '')
+      + '.';
+    return `<div class="cert-tramo" style="--c:${c}">
+      <div>
+        <span class="t-regla">${x.base} + ${_num(x.spread_pp, 2)}</span>
+        · ${x.desde} → ${x.hasta} · ${x.dias.toLocaleString('es-AR')} días
+        ${x.confirmado ? '' : '<span class="t-sinconf">SIN CONFIRMAR</span>'}
+        <div>${regla}</div>
+        <div class="t-fuente">${r.norma || ''}${r.norma && r.fuente ? ' — ' : ''}${r.fuente || ''}</div>
+        ${r.nota ? `<div class="t-fuente">${r.nota}</div>` : ''}
+      </div>
+      <div class="t-cifra">
+        <div>compuesto <b>${_num(x.coeficiente, 6)}</b></div>
+        <div style="color:var(--gray-700)">simple ${_num(x.coeficiente_sin_capitalizar, 6)}</div>
+        <div style="color:var(--gray-700);font-size:11px">TNA ${_num(x.tna_min, 2)} – ${_num(x.tna_max, 2)} %</div>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div style="margin:10px 0 4px;font-size:12px;color:var(--gray-700);">
+      <b>De dónde sale la tasa en cada tramo.</b> Los coeficientes de los tramos
+      MULTIPLICADOS dan el coeficiente compuesto total; los simples, SUMADOS
+      (menos 1 cada uno), dan el simple.
+    </div>${filas}`;
+}
+
+/* ⚠ LAS DOS LECTURAS SALEN JUNTAS Y DEL MISMO TAMANO (Juan, 2026-09-11).
+   Antes habia un boton para elegir una. El problema no era de comodidad: cual
+   corresponde lo dice el pliego, y con un boton el que miraba la pantalla veia
+   un numero sin enterarse de que existia el otro. Sobre 2022-2026 el compuesto
+   da 14,70 y el simple 3,69 — tres veces. Un numero asi no puede depender de
+   como quedo un boton.
+
+   ⚠ EL COEFICIENTE VA EN GRANDE Y CON SEIS DECIMALES. Es lo unico que se
+   compara contra la planilla de CAMARCO: si no coincide a seis decimales, no
+   coincide. La plata sale de el, no al reves. */
+function pintarCertificados(d) {
+  const esDesc = d.modo === 'descuento';
+  const caja = (x, titulo, color, pie) => `
+    <div class="cert-lectura" style="--c:${color}">
+      <div class="l-tit">${titulo}</div>
+      <div class="l-coef">${_num(x.coeficiente, 6)}</div>
+      <div class="l-plata">${esDesc ? 'Te dan hoy' : 'Total'} $ ${_ars(esDesc ? x.valor_hoy : x.total)}</div>
+      <div style="font-size:13px;margin-top:2px;">
+        ${esDesc
+          ? `te cuesta <b>$ ${_ars(x.costo)}</b> <span style="color:var(--gray-700)">(${_num(x.pct_del_nominal, 2)} % del nominal)</span>`
+          : `interés <b>$ ${_ars(x.interes)}</b> <span style="color:var(--gray-700)">(${_num(x.pct, 2)} %)</span>`}
+      </div>
+      <div class="l-pie">${pie}</div>
+    </div>`;
+  const b = d.brecha || {};
+  return `
+    <div style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap;">
+      ${caja(d.compuesto, 'Con interés compuesto', '#1a7a4a',
+             'Π (1 + i<sub>d</sub>) — el índice del BNA, el método de CAMARCO')}
+      ${caja(d.simple, 'Sin capitalizar (interés simple)', '#1f5fb7',
+             '1 + Σ i<sub>d</sub> — la MISMA tasa diaria, sumada en vez de multiplicada')}
+      <div style="flex:1;min-width:230px;border:1px solid var(--gray-300);border-radius:8px;padding:14px;background:var(--white);">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--gray-700);font-weight:700;">
+          Cuánto separa a las dos</div>
+        <div style="font-size:26px;font-weight:700;margin:6px 0;font-variant-numeric:tabular-nums;">
+          ${_num(b.pct_sobre_simple, 1)} %</div>
+        <div style="font-size:13px;">$ ${_ars(b.plata)} de diferencia</div>
+        <div class="l-pie" style="color:var(--gray-700);font-size:11.5px;margin-top:6px;">
+          ${d.dias.toLocaleString('es-AR')} días · índice ${_num(d.indice_inicial, 6)} → ${_num(d.indice_final, 6)}
+          · TNA ${_num(d.tna_primera, 2)} % → ${_num(d.tna_ultima, 2)} %
+          · ${d.mipyme ? 'MiPyME' : 'no MiPyME'}</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;padding:10px 12px;border-radius:8px;
+         background:rgba(240,180,20,.10);border-left:3px solid #b7791f;font-size:13px;">
+      Conversión del Banco Nación: <b>TNM = TNA × 30/365</b> (sin redondear), y de ahí
+      <b>i<sub>d</sub> = (1+TNM)<sup>1/30</sup> − 1</b>, capitalizada por días
+      calendario — sábados, domingos y 29/02 incluidos. <b>No es la de la pestaña
+      de Mora</b> (que hace TNA/365): sobre este período la diferencia entre las
+      dos convenciones llega al 10 % del interés.
+      <div style="font-size:12px;color:var(--gray-700);margin-top:4px;">
+        Verificado contra CAMARCO: TNA 30 % → TNM 2,465753 % y 168,768895 ×
+        (1+0,000812278) = 168,905982, exacto a seis decimales. Con la TNM
+        redondeada a 2,47 % daría 168,906216 — por eso va sin redondear.</div>
+    </div>
+    ${(d.avisos || []).length
+      ? `<div class="nota error" style="margin-top:8px;">⚠ ${d.avisos.join(' · ')}</div>` : ''}`;
+}
+
+/* ⚠ LA TABLA ES LA PRUEBA, NO UN ADORNO. Es la planilla que CAMARCO deja
+   tras el login, fila por fila: si alguien discute el coeficiente, se abre
+   acá y se ve el dia exacto donde se separan los numeros.
+
+   ⚠ SE RESALTA EL CAMBIO DE REGIMEN, NO EL DE TASA. Primero marcaba los dias
+   en que se movia la TNA y quedaban resaltadas 395 de 640 filas: la TAMAR
+   cambia casi todos los dias. El dato auditable es el otro — el dia en que
+   el BNA cambio el spread (+7,00 a +6,50) o la serie base. Esos son dos o
+   tres en cuatro anios, y son los que hay que ir a mirar. */
+function pintarTablaCertificados(s) {
+  const filas = s.filas || [];
+  if (!filas.length) return '';
+  let prev = null;
+  /* ⚠ EL CAMBIO SE DETECTA POR `regimen_id`, NO POR LA TASA. Primero marcaba
+     los dias en que se movia la TNA y quedaban resaltadas 395 de 640 filas: la
+     TAMAR cambia casi todos los dias. El dato auditable es el otro — el dia en
+     que el BNA cambio la regla. Son dos en cuatro anios. */
+  const cuerpo = filas.map(f => {
+    const reg = f.regimen_id || null;
+    const cambio = prev !== null && reg !== prev;
+    prev = reg;
+    const clase = f.tna == null ? 'sinregimen' : (cambio ? 'cambio' : '');
+    return `<tr class="${clase}" data-reg="${reg || ''}" style="--c:${f.color || 'transparent'}">
+      <td>${f.fecha}</td>
+      <td>${_num(f.tna, 3)}</td>
+      <td>${_num(f.tnm_pct, 4)}</td>
+      <td>${f.tasa_diaria_pct == null ? '—' : _num(f.tasa_diaria_pct, 7)}</td>
+      <td>${_num(f.indice, 6)}</td>
+      <td style="text-align:left;color:var(--c,#999);font-weight:600;">${f.base || '—'}${f.spread_pp != null ? ' + ' + _num(f.spread_pp, 2) : ''}</td>
+      <td style="text-align:left;color:#999;">${f.fecha_tasa || (f.tna == null ? 'sin régimen' : '')}</td>
+    </tr>`;
+  }).join('');
+  return `
+    <div style="margin-top:16px;font-size:13px;color:#666;">
+      <b>Índice diario</b> — ${filas.length.toLocaleString('es-AR')} días.
+      La barra de color a la izquierda de cada fila es el régimen que rigió ese
+      día, con el mismo color de la leyenda de arriba; la línea gruesa marca el
+      día en que el BNA cambió la regla. La última columna es la fecha de la
+      que se leyó la serie base (5 hábiles antes).
+    </div>
+    <div class="cert-tabla-wrap"><table>
+      <thead><tr>
+        <th>Fecha</th><th>TNA %</th><th>TNM %</th><th>Tasa diaria %</th>
+        <th>Índice</th><th style="text-align:left;">Régimen</th>
+        <th style="text-align:left;">Serie leída del</th>
+      </tr></thead>
+      <tbody>${cuerpo}</tbody>
+    </table></div>`;
 }
 
 </script>
