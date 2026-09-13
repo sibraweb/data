@@ -462,6 +462,26 @@ function render() {
               <tbody id="tbody-resumen"></tbody>
             </table>
           </div>
+          <h3>¿Alguna serie dejó de crecer?</h3>
+          <p class="nota">Pedido de Juan (13/09/2026): <em>«la vista general de
+            índices debería tener todos los índices relevados y decir desde hace
+            cuánto no actualiza, así vemos si hay algún problema»</em>. Hace falta
+            justamente porque ahora corren solas: «corre solo» sin nadie mirando
+            es como estuvieron los schedulers en agosto — todas las fuentes
+            contestando bien y las series sin crecer.</p>
+          <div class="estado" id="estado-frescura"></div>
+          <div class="tabla-wrap">
+            <table class="tabla-resumen">
+              <thead><tr><th>Serie</th><th>Valores</th><th>Último dato</th>
+                <th>Días sin moverse</th><th>Cadencia</th></tr></thead>
+              <tbody id="tbody-frescura"></tbody>
+            </table>
+          </div>
+          <p class="nota">⚠ Los días se cuentan contra HOY, no contra la última
+            corrida: un job que corre todos los días y trae siempre el mismo
+            último dato está muerto y el historial dice «ok» igual. La tolerancia
+            es por cadencia — el ICC sale una vez por mes con un mes de rezago,
+            así que 44 días es lo esperable y 197 no.</p>
         </section>`;
     }
 
@@ -1524,6 +1544,12 @@ async function cargarVentana(v) {
       resumenFilas = await r.json();
       pintarResumen(resumenFilas);
       estadoEl.textContent = 'Actualizado';
+      // ⚠ ADENTRO de esta rama y sin await: la rama termina en `return`, asi
+      // que una llamada puesta mas abajo en el dispatcher nunca se alcanzaba
+      // —lo probe y la tabla quedaba vacia sin decir nada—. Sin await para que
+      // un Supabase lento no retrase la tabla de variaciones, que es para lo
+      // que se entra al Resumen.
+      pintarFrescura();
     } catch (err) {
       estadoEl.textContent = `${msgFalla(err)}`;
       estadoEl.classList.add('error');
@@ -1969,6 +1995,36 @@ async function init() {
    simple, considerar compuesto, y vemos la diferencia». La pregunta no es
    cual prefiero: es cuanto hay entre uno y otro. */
 let _moraTasas = [];
+
+// ⚠ NO BLOQUEA EL RESUMEN. Se llama sin await a proposito: si Supabase tarda,
+// la tabla de variaciones —que es para lo que se entra— no tiene por que
+// esperar a un cuadro de diagnostico.
+async function pintarFrescura() {
+  const est = document.getElementById('estado-frescura');
+  const tb = document.getElementById('tbody-frescura');
+  if (!tb) return;
+  try {
+    const r = await pedir('/api/estado');
+    const d = await r.json();
+    if (d.error) { est.textContent = d.error; est.classList.add('error'); return; }
+    // las atrasadas primero: es lo unico que hay que mirar
+    const filas = [...d.series].sort((a, b) =>
+      (b.atrasada - a.atrasada) || ((b.dias_sin_actualizar ?? -999) - (a.dias_sin_actualizar ?? -999)));
+    tb.innerHTML = filas.map(f => `
+      <tr${f.atrasada ? ' style="background:#fff3f3"' : ''}>
+        <td>${f.serie}${f.atrasada ? ' ⚠' : ''}</td>
+        <td>${f.valores}</td>
+        <td>${f.hasta || '—'}</td>
+        <td>${f.dias_sin_actualizar ?? '—'}${f.atrasada ? ` <small>(tolera ${f.tolerancia_dias})</small>` : ''}</td>
+        <td>${f.cadencia}</td></tr>`).join('');
+    est.classList.toggle('error', d.atrasadas > 0);
+    est.textContent = d.atrasadas
+      ? `${d.atrasadas} de ${d.total} series atrasadas: ${d.detalle_atrasadas.map(x => x.serie).join(', ')}`
+      : `Las ${d.total} series al día.`;
+  } catch (e) {
+    est.textContent = msgFalla(e); est.classList.add('error');
+  }
+}
 
 // ── Redeterminacion ────────────────────────────────────────────────────────
 //

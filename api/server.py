@@ -1546,6 +1546,35 @@ def refrescar_rem():
     print(f"[scheduler] {REM_INTERANUAL_TAB} +{n2} filas")
 
 
+def refrescar_mano_obra():
+    """Los CSV de mano de obra y redeterminacion, a Drive.
+
+    ⚠ POR QUE VA EN `FUENTES_MANUALES` Y NO COMO BOTON NUEVO EN EL PANEL. Es la
+    regla de Juan (11/09/2026): lo que corre solo va junto en los schedulers, y
+    un boton es para lo que alguien tiene que mirar. Registrado aca, el job
+    diario `indices_todo` lo levanta sin que haya que tocar el panel.
+
+    ⚠ Y VA PORQUE SI NO, NO CORRE NUNCA. Los scrapers de CAMARCO y de los topes
+    de ARCA quedaron andando pero sin nadie que los llame: la pantalla de mano
+    de obra lee los CSV, asi que se habria quedado mostrando el coeficiente y
+    los topes del dia que se corrio el export a mano, envejeciendo en silencio.
+    Los topes cambian TODOS LOS MESES.
+
+    ⚠ CADA TAREA AISLADA. Si Drive no esta montado en la maquina que corre el
+    scheduler, o CAMARCO no contesta, las demas igual tienen que escribir. Una
+    excepcion que sube mata las 20 fuentes de `sincronizar_todo`.
+    """
+    import exportar_drive as ed
+    # orden: primero las que salen a internet, despues los volcados de la base
+    for nombre in ("topes", "cargas", "acuerdos", "conceptos931",
+                   "cac", "uocra", "indec"):
+        try:
+            ed.TAREAS[nombre](ed.DESTINO)
+        except Exception as e:
+            print("[scheduler] mano_obra/%s NO se pudo: %s: %s"
+                  % (nombre, type(e).__name__, str(e)[:110]))
+
+
 FUENTES_MANUALES = {
     "bcra_diarias": refrescar_bcra_diarias,
     "bcra_mensuales": refrescar_bcra_mensuales,
@@ -1565,6 +1594,10 @@ FUENTES_MANUALES = {
     "indec_op": refrescar_indec_op,
     "alquileres": refrescar_alquileres,
     "publicar_resumen": publicar_resumen,
+    # ⚠ ULTIMA A PROPOSITO: escribe en Drive y sale a CAMARCO y ARCA, asi que
+    # es la mas lenta y la que mas puede fallar. Si reventara, las otras ya
+    # corrieron.
+    "mano_obra": refrescar_mano_obra,
 }
 
 
