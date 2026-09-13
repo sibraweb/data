@@ -28,3 +28,10 @@ token.pickle
 *.log
 perfil_chrome/
 *.sqlite3
+
+# Lo que se baja de la fuente: el PDF del indice de CAMARCO, el de tasas del
+# BNA y su marca de ultima carga. Son 13 MB que el propio codigo vuelve a
+# bajar (`cargar_camarco_certificados.py` los pide a la API de medios del
+# sitio), y la convencion de la casa es que las bases van a
+# H:\My Drive\web_sibra\, no al repo.
+datos/
