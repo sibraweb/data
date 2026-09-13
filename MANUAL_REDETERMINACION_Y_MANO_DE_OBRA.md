@@ -144,6 +144,89 @@ O sea: el 2,15 que se usaba es **2,1350**. Y la serie es notablemente estable �
 Su tabla tiene siete items y conceptos distintos — sueldo por tiempo corrido, sin
 asistencia perfecta ni vestimenta. **No se mezclan.**
 
+### Las tres bases de hora — y cuál usar
+
+Nombres de Juan (13/09/2026): *«uno hora oficial si nada, lo que se publica, o
+ajustar por hora "camarco" vamos a llamarlo; cuando el subcontrato sea más
+exacto vamos a tener que considerar los más parecido a cómo es el recibo de
+sueldo»*.
+
+| base | qué es | Oficial, Zona A, ago-2026 | para qué |
+|---|---|---:|---|
+| **hora oficial** | el básico publicado por UOCRA, tal cual | **$ 6.348,00** | comparar, verificar una factura |
+| **hora CAMARCO** | básico × coeficiente de incidencia (2,1350) | **$ 13.552,98** | presupuestar, redeterminar, APU |
+| **hora recibo** | la liquidación real del trabajador | *todavía no existe* | subcontrato exacto, costo real por obra |
+
+Las cuatro categorías, agosto-2026 Zona A:
+
+| categoría | hora oficial | hora CAMARCO |
+|---|---:|---:|
+| Ayudante | 5.399,00 | 11.526,86 |
+| Medio Oficial | 5.866,00 | 12.523,91 |
+| Oficial | 6.348,00 | 13.552,98 |
+| Oficial Especializado | 7.420,00 | 15.841,70 |
+
+### Las horas hábiles ya están adentro del coeficiente
+
+CAMARCO publica su propia distribución del tiempo en el Trabajo completo, y
+ancla el 100 % ahí: *«1- Salario por tiempo efectivamente trabajado 100,00 %
+(corresponde 1885 horas/año)»*.
+
+| | días/año | horas/año | por quincena |
+|---|---:|---:|---:|
+| año calendario | 365 | 2.920 | — |
+| **lo que la OBRA trabaja** | 262 | **2.098** | ≈ 87,4 h |
+| **lo que los OPERARIOS trabajan** | 236 | **1.885** | ≈ 78,5 h |
+
+Del calendario a la obra se descuentan domingos (52), medios sábados (26),
+feriados (12) y **13 días de lluvia** (84 días corridos de lluvia/año en
+Capital, de los que se estima que el 20 % paraliza la obra). De la obra al
+operario, licencia ordinaria (11), inasistencias (3), enfermedad (7), licencias
+especiales (1) y accidentes (5).
+
+> ⚠ **LA TRAMPA: no dividas un costo de quincena por las horas trabajadas.** El
+> item c del coeficiente (16,53 %) YA ES *«salarios pagados por tiempos no
+> trabajados, incluida indemnización por causas climáticas»*. Si además bajás el
+> divisor a horas productivas, contás la lluvia dos veces.
+>
+> Con 10 horas trabajadas: lo correcto es `10 × 6.348 × 2,1350 = $ 135.529,80`.
+> Prorratear la quincena entera (88 h = $ 1.192.662) sobre 10 horas da
+> **$ 119.266 por hora — inflado 8,8 veces.**
+
+La fórmula es: **`horas efectivamente trabajadas × básico horario × coeficiente`**.
+Las horas hábiles sirven para otra cosa: estimar la capacidad de una quincena y
+el rendimiento de un APU.
+
+### Qué aportes están y cuáles NO
+
+**SÍ está** — item h, `39,32 %`, desglosado en el Trabajo completo:
+`20,4 %` (Régimen Nacional de Jubilaciones y Pensiones, ex-Cajas de Subsidios
+Familiares, Fondo Nacional de Empleo, INSSJyP) `+ 6,00 %` (Régimen de Obras
+Sociales) `= 26,4 %` aplicado al total de conceptos remuneratorios (148,76 %),
+lo que da `39,27 %`, más el Seguro de Vida Colectivo Obligatorio.
+
+**NO está** (verificado por búsqueda en todo el texto del Trabajo 185 — cero
+menciones de cada uno). Todo esto va **por encima** del 213,50 %:
+
+- **Las sumas no remunerativas.** Y no son chicas: $67.100 por quincena para un
+  Oficial (julio-2026), del orden del 13 % del básico quincenal.
+- **El aporte solidario extraordinario** (2 % sobre remuneraciones de no
+  afiliados, 04/2026 → 03/2027).
+- **La contribución empresaria del 2 %.** Además es imposible que esté: el
+  Trabajo 185 se publicó el **03/07/2026** y esa contribución se firmó el
+  **30/07/2026** y se homologó el **20/08/2026** (con vigencia retroactiva al
+  01/06/2026). Hasta que CAMARCO publique el Trabajo siguiente, el 2 % se suma
+  aparte.
+- **IERIC.**
+
+**Los aportes del trabajador tampoco están, y corresponde que no estén**:
+jubilación, obra social e INSSJP salen del bruto del trabajador. No son costo
+del empleador — están adentro del 100.
+
+> Conclusión: **el 2,15 que usabas no estaba de más, estaba de menos.** El
+> coeficiente publicado es 2,1350, pero le falta el no remunerativo (~13 %) y el
+> 2 % de contribución empresaria.
+
 ### Dos advertencias antes de usarlo
 
 1. **El item de ART hay que reemplazarlo por el propio.** CAMARCO usa el
