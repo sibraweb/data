@@ -381,12 +381,58 @@ aritmética:
    `costo / jornal puro = 2,2002` — y **sin el fondo de cese**, que no tiene
    renglón. Agregándole el 12 % daría **2,3442**.
 
-> ⚠ **Dos renglones del demo NO se pueden copiar**: la base de *Obra Social*
-> cambia entre quincenas (Q1 sobre rem + no rem = 529.231; Q2 sobre 391.776) y
-> la de *Seguro de Vida* también (Q1 sobre 269.626; Q2 sobre 766.175). Y las
-> contribuciones patronales están **fijas en $332.772 en las dos** aunque el
-> remunerativo pase de 470.131 a 729.238. Son plantillas de demostración: sirven
-> para la MECÁNICA, no para los topes ni las bases de esos dos conceptos.
+> ⚠ **Dos renglones del demo se contradicen entre quincenas**: la base de *Obra
+> Social* (Q1 sobre rem + no rem = 529.231; Q2 sobre 391.776) y la de *Seguro de
+> Vida* (Q1 sobre 269.626; Q2 sobre 766.175). Y las contribuciones patronales
+> están **fijas en $332.772 en las dos** aunque el remunerativo pase de 470.131
+> a 729.238. Es una plantilla de demostración: sirve para la MECÁNICA.
+
+### Las fórmulas, con su base explícita
+
+La calculadora web del mismo estudio trae **toda la especificación en su
+JavaScript**, y eso resuelve las dos contradicciones de arriba. Está guardada en
+`referencia/uocra_formulas_liquidacion.csv`.
+
+| renglón | fórmula | base |
+|---|---|---|
+| Jubilación | `grossRem × 0,11` | **solo remunerativo** |
+| PAMI / INSSJP | `grossRem × 0,03` | **solo remunerativo** |
+| Obra Social (Construir Salud / OSPECON) | `(grossRem + grossNoRem) × 0,03` | **rem + NO rem** |
+| Cuota Sindical UOCRA (afiliado) | `grossRem × 0,025` | solo remunerativo |
+| Aporte solidario (NO afiliado) | `grossRem × 0,02` | solo remunerativo |
+| **Seguro de vida CCT 76/75** | `básico Sereno Zona A × 0,02 × factor del período` | **no es sobre el sueldo del trabajador** |
+
+> El seguro de vida **no sale de la remuneración del empleado**: es el 2 % del
+> básico del Sereno Zona A. Eso es exactamente lo que nuestro propio scraper de
+> UOCRA ya documentaba (*«siempre 2 % del básico de Sereno Zona A, verificado
+> exacto contra 5 períodos reales»*) — **confirmación independiente**, y explica
+> la base rara de 269.626 del demo.
+
+**Adicionales del CCT, con su artículo:**
+
+| concepto | alícuota | sobre |
+|---|---:|---|
+| Asistencia perfecta (**Art. 52**) | 20 % | salario básico devengado |
+| Zona especial / patagónica (**Art. 53**) | 20 % | básico proporcional |
+| Submuración (**Art. 54**) | 10 % | básico proporcional |
+| Zanjas (**Art. 55**) | 10 % | básico proporcional |
+| Traslado fuera de radio | 30 % | básico proporcional **+ presentismo** |
+| Viático por comida | 2,5 h de jornal | por día |
+| **Fondo de cese** | **12 %** 1er año / **8 %** después | |
+
+**Parámetros de tiempo** — y acá está por qué la suma no remunerativa cambia de
+una quincena a otra:
+
+```
+horasMensualesBase      200      snrHorasMensualesBase   176
+diasMesBase              30      horasPorDiaBase           8
+divisorFeriado           25      maxHorasSemanales        48
+```
+
+**Son dos bases horarias distintas**: 200 h/mes para el jornal y **176 h/mes
+para la suma no remunerativa**. Por eso el no remunerativo va $59.100 en una
+quincena y $36.938 en la otra — se prorratea sobre 176, no sobre las horas
+trabajadas.
 
 ### Qué falta para la hora recibo
 
