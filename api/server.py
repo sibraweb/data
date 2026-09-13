@@ -44,6 +44,7 @@ from flask_cors import CORS
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import db
+import descuento_certificados as dcert
 import sheets
 from ajuste import ajustar
 from proyeccion import estimar_modelo, proyectar
@@ -208,6 +209,17 @@ SERIES_TASAS = {
 
 # Series que aparecen en la tabla Resumen (nombre visible -> familia resoluble
 # por _resolver_familia). Réplica de la hoja "Resumen Indices" del Excel.
+# ⚠⚠ ESTA LISTA ES LO QUE SALE A LA CALLE. `publicar_resumen()` recorre SOLO
+# estas familias y las escribe en `indices_resumen_publico`, la única tabla con
+# policy de lectura para `anon`. Es lista blanca: una serie que no está acá no
+# se publica, y agregar un renglón acá ES publicar.
+#
+# ⚠ NO AGREGAR LAS SERIES `CERT_BNA_*` (índice de descuento de certificados).
+# Juan, 2026-09-11: *«la base de CAMARCO vamos a seguir relevándola, pero no la
+# vamos a publicar mientras no lo vean; solo publicamos el índice de costos»*.
+# De CAMARCO sale publicado únicamente el índice de COSTO DE CONSTRUCCIÓN (las
+# tres familias `cac:` de abajo) — eso se releva y se publica desde antes. El
+# índice T.E.M. de certificados se releva para uso interno y se queda adentro.
 RESUMEN_SERIES = [
     ("UOCRA Oficial", "uocra"),
     ("RIPTE", "ripte"),
@@ -900,6 +912,173 @@ def get_mora():
     return jsonify(r)
 
 
+# ── DESCUENTO DE CERTIFICADOS DE OBRA PÚBLICA (índice diario BNA) ───────────
+# Juan, 2026-09-10. Pestaña aparte de Mora, y no una tasa más de su menú,
+# porque la conversión TNA→diaria es OTRA (ver el encabezado de
+# `descuento_certificados.py`): mora.py hace TNA/365 y acá se pasa por la TNM
+# del Banco Nación. Sobre 4 años la diferencia llega al 10 % del interés.
+#
+# ⚠ Acá solo se le acercan las series del BCRA; la regla y la fórmula viven
+# en el motor. El spread (+10,00 / +7,00 / +6,50) es del BNA, no nuestro.
+def _series_base_descuento():
+    out = {}
+    for tab in ("TAMAR", "BADLAR", "TM20"):
+        try:
+            out[tab] = db.leer_serie_simple(tab)
+        except Exception:
+            out[tab] = []
+    return out
+
+
+def _publicado_de_query():
+    """El índice PUBLICADO por CAMARCO, del tomador que se haya elegido.
+
+    ⚠ LA COLUMNA DEPENDE DEL TOMADOR, y no es un detalle cosmético: al
+    09/09/2026 el índice de Grandes Inversores vale 43.756 y el de MiPyME
+    25.719. Servir la columna equivocada no da un número parecido, da otro.
+    """
+    mip = request.args.get("mipyme") in ("1", "true", "si")
+    suf = "MIPYME" if mip else "GRANDES"
+    out = {}
+    for clave, tab in (("indices", "CERT_BNA_IND_" + suf),
+                       ("tnas", "CERT_BNA_TNA_" + suf)):
+        try:
+            out[clave] = db.leer_serie_simple(tab)
+        except Exception:
+            out[clave] = []
+    return out
+
+
+def _regimen_previo_de_query():
+    """Tramo anterior al primer régimen relevado, declarado a mano desde la
+    pantalla.
+
+    ⚠ Antes de esa fecha no hay régimen. Si el usuario declara uno se usa,
+    pero sale marcado `confirmado: False` y la pantalla lo dice: un número
+    calculado con una regla supuesta tiene que verse distinto de uno
+    calculado con la regla oficial.
+    """
+    base = (request.args.get("previo_base") or "").strip().upper()
+    if not base:
+        return None
+    try:
+        spread = float(request.args.get("previo_spread") or 0)
+    except ValueError:
+        spread = 0.0
+    return {
+        "id": "declarado",
+        "desde": request.args.get("previo_desde") or "2001-01-01",
+        "hasta": (dt.date.fromisoformat(dcert.PRIMER_REGIMEN)
+                  - dt.timedelta(days=1)).isoformat(),
+        "base": base, "spread_pp": spread, "spread_pp_mipyme": None,
+        "lag_habiles": request.args.get("previo_lag", default=5, type=int),
+        "confirmado": False,
+        "norma": "declarado desde la pantalla",
+        "fuente": "DECLARADO A MANO — sin confirmar contra BNA/Boletín Oficial",
+        "color": "#8a8a8a",
+    }
+
+
+@app.route("/api/descuento-certificados")
+def get_descuento_certificados():
+    """?monto=&desde=&hasta=&capitalizar=1|0&modo=mora|descuento
+
+    Devuelve SIEMPRE las dos lecturas (`compuesto` y `simple`) más el
+    desglose por tramo de régimen. `capitalizar` solo elige cuál va en las
+    claves planas, para no romper a quien ya consume esto.
+
+    Opcional, para el tramo sin régimen relevado:
+        &previo_base=BADLAR&previo_spread=10&previo_desde=2018-01-01
+    """
+    desde, hasta = request.args.get("desde"), request.args.get("hasta")
+    if not desde or not hasta:
+        return jsonify({"error": "faltan desde y hasta"}), 400
+    try:
+        monto = float(request.args.get("monto") or 0)
+    except ValueError:
+        return jsonify({"error": "monto inválido"}), 400
+    capitalizar = (request.args.get("capitalizar", "1") not in ("0", "false", "no"))
+    r = dcert.calcular(
+        monto, desde, hasta, _series_base_descuento(),
+        capitalizar=capitalizar,
+        modo=request.args.get("modo") or "mora",
+        regimen_previo=_regimen_previo_de_query(),
+        base=request.args.get("base", default=100.0, type=float),
+        mipyme=request.args.get("mipyme") in ("1", "true", "si"),
+        fuente=request.args.get("fuente") or "auto",
+        publicado=_publicado_de_query(),
+    )
+    if "error" in r:
+        return jsonify(r), 400
+    return jsonify(r)
+
+
+@app.route("/api/descuento-certificados/serie")
+def get_descuento_certificados_serie():
+    """La tabla día por día: fecha, TNA, TNM, tasa diaria e índice acumulado.
+
+    Es la planilla que CAMARCO publica para socios, reconstruida con BCRA+BNA.
+    Cada fila trae `regimen_id` y `color`: la pantalla pinta, no adivina.
+    """
+    desde, hasta = request.args.get("desde"), request.args.get("hasta")
+    if not desde or not hasta:
+        return jsonify({"error": "faltan desde y hasta"}), 400
+    r = dcert._filas_empalmadas(
+        desde, hasta, _series_base_descuento(), None,
+        request.args.get("base", default=100.0, type=float),
+        _regimen_previo_de_query(),
+        request.args.get("mipyme") in ("1", "true", "si"),
+        request.args.get("fuente") or "auto",
+        _publicado_de_query(),
+    )
+    if "error" in r:
+        return jsonify(r), 400
+    return jsonify(r)
+
+
+@app.route("/api/descuento-certificados/regimenes")
+def get_descuento_certificados_regimenes():
+    """Qué regla rige en cada tramo, con qué color se pinta y de qué fuente
+    sale — para mostrarlo en la pantalla ANTES de calcular, no después de que
+    alguien pregunte.
+
+    ⚠ Devuelve el rango de CADA serie base, no solo el de TAMAR. El régimen
+    viejo se para en BADLAR: decir hasta dónde llega TAMAR y callar BADLAR
+    dejaba media pantalla sin respaldo visible.
+    """
+    series = {}
+    for tab in sorted({str(r["base"]).upper() for r in dcert.REGIMENES}):
+        try:
+            v = db.leer_serie_simple(tab)
+        except Exception:
+            v = []
+        series[tab] = {"n": len(v),
+                       "desde": v[0]["FECHA"] if v else None,
+                       "hasta": v[-1]["FECHA"] if v else None}
+    for tab in ("CERT_BNA_IND_GRANDES", "CERT_BNA_IND_MIPYME"):
+        try:
+            v = db.leer_serie_simple(tab)
+        except Exception:
+            v = []
+        series[tab] = {"n": len(v),
+                       "desde": v[0]["FECHA"] if v else None,
+                       "hasta": v[-1]["FECHA"] if v else None}
+    return jsonify({
+        "regimenes": dcert.REGIMENES,
+        "publicada": {"fuente": dcert.FUENTE_PUBLICADA,
+                      "color": dcert.COLOR_PUBLICADA,
+                      "desde": series["CERT_BNA_IND_GRANDES"]["desde"],
+                      "hasta": series["CERT_BNA_IND_GRANDES"]["hasta"]},
+        "primer_regimen": dcert.PRIMER_REGIMEN,
+        "color_sin_regimen": dcert.COLOR_SIN_REGIMEN,
+        "variantes_abiertas": dcert.VARIANTES_ABIERTAS,
+        "series": series,
+        # compat: la pantalla vieja leía `tamar` suelto
+        "tamar": series.get("TAMAR", {"n": 0, "desde": None, "hasta": None}),
+    })
+
+
+
 @app.route("/api/ajustar")
 def get_ajustado():
     familia = request.args.get("familia")
@@ -1426,6 +1605,29 @@ def estado_sync():
     """Progreso de la sincronización inicial. El front lo consulta para refrescar
     la vista cuando terminan de entrar los datos nuevos."""
     return jsonify(SYNC_INICIAL)
+
+
+@app.get("/api/estado")
+def estado_series():
+    """TODAS las series con su antiguedad. Es la vista general que pidio Juan.
+
+    Devuelve tambien `atrasadas`, que es lo unico que hay que mirar: la lista
+    completa sirve para ver que estan todas, pero el numero que importa es
+    cuantas dejaron de crecer.
+    """
+    try:
+        filas = db.frescura()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 503
+    atrasadas = [f for f in filas if f["atrasada"]]
+    return jsonify({
+        "series": filas,
+        "total": len(filas),
+        "atrasadas": len(atrasadas),
+        # el detalle de las atrasadas viene aparte para que la pantalla pueda
+        # mostrarlo arriba sin recorrer las 36
+        "detalle_atrasadas": atrasadas,
+    })
 
 
 @app.get("/api/uso-supabase")

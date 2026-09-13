@@ -72,6 +72,82 @@ def _num(v):
         return None
 
 
+def frescura() -> list[dict]:
+    """Cada serie, cuantos valores tiene y hace cuantos dias que no crece.
+
+    ⚠ POR QUE ESTO Y NO `chequear_fuentes.py`. Ese corre TODAS las fuentes
+    —sale a internet— y tarda; sirve para diagnosticar. Esto lee la base y
+    contesta en un segundo, que es lo que una vista necesita para abrirse.
+
+    Juan, 2026-09-13: *«la vista general de indices deberia tener todos los
+    indices relevados y decir desde hace cuanto no actualiza, asi vemos si hay
+    algun problema»*. Y hace falta justamente porque ahora corren solas: «corre
+    solo» sin nadie mirando es como estuvieron los schedulers en agosto,
+    apagados, con todas las fuentes contestando bien y las series sin crecer.
+
+    ⚠ LOS DIAS SE CUENTAN CONTRA HOY, NO CONTRA LA ULTIMA CORRIDA. Un job que
+    corre todos los dias y trae siempre el mismo ultimo dato esta muerto y el
+    historial no lo dice: dice «ok» todos los dias.
+
+    `atraso_normal` es cada cuanto PUBLICA la fuente, no cada cuanto corremos:
+    el ICC sale una vez por mes con un mes de rezago, asi que 44 dias es lo
+    esperable y 197 no. Sin ese dato la vista mostraria en rojo la mitad de las
+    series mensuales y se aprenderia a ignorarla.
+    """
+    # dias que es NORMAL que una serie este sin moverse, por como publica
+    TOLERANCIA = {
+        "diaria": 5,       # habiles + fin de semana largo
+        "mensual": 50,     # sale con un mes de rezago
+        "trimestral": 130,
+    }
+    CADENCIA = {
+        # diarias: bancarias, dolar, indices de mercado
+        "DOLAR": "diaria", "CER": "diaria", "UVA": "diaria", "UVI": "diaria",
+        "ICL": "diaria", "BADLAR": "diaria", "BAIBAR": "diaria",
+        "TM20": "diaria", "TAMAR": "diaria", "TIM": "diaria",
+        "MERVAL": "diaria", "RIESGO_PAIS": "diaria", "CAUCION": "diaria",
+        "CHEQUES": "diaria", "PAGARES": "diaria", "USO_JUSTICIA": "diaria",
+        "DEPOSITOS_30D": "diaria", "ADELANTOS_CTA_CTE": "diaria",
+        "ADELANTOS_GRANDES": "diaria", "PRESTAMOS_PERSONALES": "diaria",
+        "CERT_BNA_TNA_GRANDES": "diaria", "CERT_BNA_TNA_MIPYME": "diaria",
+        "CERT_BNA_IND_GRANDES": "diaria", "CERT_BNA_IND_MIPYME": "diaria",
+    }
+    cx = _conectar()
+    try:
+        with cx.cursor() as cur:
+            cur.execute("""
+                SELECT serie, COUNT(*) AS n,
+                       MIN(fecha) AS desde, MAX(fecha) AS hasta,
+                       (CURRENT_DATE - MAX(fecha)) AS dias
+                  FROM public.series_valores
+                 GROUP BY serie ORDER BY 5 DESC NULLS FIRST""")
+            filas = cur.fetchall()
+    finally:
+        cx.close()
+
+    out = []
+    for f in filas:
+        # ⚠ el cursor devuelve DICTS, no tuplas: `f[0]` daba KeyError. Se
+        # accede por nombre, que ademas no se rompe si la consulta cambia de
+        # orden manana.
+        serie = f["serie"]
+        dias = f["dias"]
+        cad = CADENCIA.get(serie, "mensual")
+        tope = TOLERANCIA[cad]
+        # ⚠ un valor con fecha FUTURA no esta atrasado: el salario minimo se
+        # publica por adelantado. `dias` negativo -> al dia.
+        atrasada = dias is not None and dias > tope
+        out.append({
+            "serie": serie, "valores": f["n"],
+            "desde": f["desde"].isoformat() if f["desde"] else None,
+            "hasta": f["hasta"].isoformat() if f["hasta"] else None,
+            "dias_sin_actualizar": dias,
+            "cadencia": cad, "tolerancia_dias": tope,
+            "atrasada": atrasada,
+        })
+    return out
+
+
 def leer_serie_simple(serie: str) -> list[dict]:
     """Series de una sola columna (ej. CER) -> [{"FECHA": "YYYY-MM-DD", "VALOR": ...}, ...]."""
     key = f"simple:{serie}"
