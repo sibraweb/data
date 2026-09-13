@@ -53,7 +53,7 @@ from proyeccion import estimar_modelo, proyectar
 from rem_estimaciones import construir_curva_mensual, resumen_por_anio
 from resumen import resumen_serie
 from resumen import variacion as calcular_variacion
-from scrapers import (alquileres, argentinadatos, bcra, bcra_rem, camarco, cauciones,
+from scrapers import (alquileres, apymeco, argentinadatos, bcra, bcra_rem, camarco, cauciones,
                       dolares, icc, indec_obra_publica, investing, mav, ripte,
                       salarios, smvm, tim, uocra, yahoo)
 
@@ -84,7 +84,7 @@ SERIES = {
     "merval": {"tab": "MERVAL", "fecha_col": "FECHA", "valor_col": "VALOR"},
     "ripte": {"tab": "RIPTE", "fecha_col": "FECHA", "valor_col": "RIPTE"},
     "uocra": {"tab": "UOCRA", "fecha_col": "FECHA", "valor_col": "OFICIAL"},
-    "construccion": {"tab": "CONSTRUCCION", "fecha_col": "FECHA", "valor_col": "INDICE_GENERAL"},
+    "apymeco": {"tab": "APYMECO", "fecha_col": "FECHA", "valor_col": "INDICE_GENERAL"},
     "cac": {"tab": "CAC", "fecha_col": "FECHA", "valor_col": "COSTO_CONSTRUCCION"},
     "salarios": {"tab": "SALARIOS", "fecha_col": "FECHA", "valor_col": "INDICE_TOTAL"},
     "icc_caba": {"tab": "ICC_CABA", "fecha_col": "FECHA", "valor_col": "GENERAL"},
@@ -113,7 +113,7 @@ SERIES_BCRA_MENSUALES = [
 
 # Familias para las que tiene sentido ofrecer una proyección (relación
 # histórica con CER/dólar + curva de previsión del REM)
-PROYECTABLES = {"uocra", "construccion", "ripte"}
+PROYECTABLES = {"uocra", "apymeco", "ripte"}
 
 DOLAR_TAB = "DOLAR"
 
@@ -165,7 +165,7 @@ CAUCION_TAB = "CAUCION"
 # "construccion:MATERIALES" o "cac:MANO_DE_OBRA") — se suman a SERIES, que
 # solo permite una columna fija por familia.
 SERIES_MULTI_COLUMNA = {
-    "construccion": {"tab": "CONSTRUCCION", "fecha_col": "FECHA",
+    "apymeco": {"tab": "APYMECO", "fecha_col": "FECHA",
                       "columnas": ["INDICE_GENERAL", "MATERIALES", "MANO_DE_OBRA", "PROVISIONES"]},
     "cac": {"tab": "CAC", "fecha_col": "FECHA",
             "columnas": ["COSTO_CONSTRUCCION", "MATERIALES", "MANO_DE_OBRA"]},
@@ -236,7 +236,7 @@ RESUMEN_SERIES = [
     ("CAMARCO costo construcción", "cac:COSTO_CONSTRUCCION"),
     ("CAMARCO materiales", "cac:MATERIALES"),
     ("CAMARCO mano de obra", "cac:MANO_DE_OBRA"),
-    ("Construcción general (APYMECO)", "construccion:INDICE_GENERAL"),
+    ("Construcción general (APYMECO)", "apymeco:INDICE_GENERAL"),
     ("Índice de Salarios INDEC", "salarios:INDICE_TOTAL"),
     ("ICC Buenos Aires (costo construcción)", "icc_buenos_aires:GENERAL"),
     ("Alquiler CABA (promedio, fuente 2013-2019)", "alquiler_caba:PROMEDIO"),
@@ -281,7 +281,7 @@ SERIES_SIMPLES_SUPABASE = {
     "RIESGO_PAIS", "MERVAL",
 }
 SERIES_ANCHAS_SUPABASE = {
-    "DOLAR", "UOCRA", "CONSTRUCCION", "CAC", "SALARIOS",
+    "DOLAR", "UOCRA", "APYMECO", "CAC", "SALARIOS",
     "ICC_CABA", "ICC_BUENOS_AIRES", "ICC_CORDOBA", "ICC_SANTA_FE",
     "ALQUILER_CABA", "RIPTE", "CAUCION", "CHEQUES", "PAGARES",
     "SMVM",
@@ -807,7 +807,7 @@ def _serie_indice(nombre_indice: str):
 def _resolver_familia(familia: str, item: str | None = None):
     """Devuelve (records, fecha_col, valor_col) para cualquier familia elegible:
       - "cer", "uocra", ...        -> serie propia de SERIES (una columna fija)
-      - "construccion:MATERIALES"  -> columna elegida dentro de una hoja multi-columna
+      - "apymeco:MATERIALES"  -> columna elegida dentro de una hoja multi-columna
       - "cac:MANO_DE_OBRA"
       - "dolar:dolar_blue"         -> una cotización dentro de la hoja DOLAR
       - "mat:43" (+ item=...)       -> cotizaciones de un proveedor de Obra, filtradas
@@ -1245,6 +1245,37 @@ def refrescar_merval():
     print(f"[scheduler] MERVAL +{n} filas (fuente: {fuente})")
 
 
+def refrescar_apymeco():
+    """El indice APYMECO, que estaba parado en feb-2026 con 197 dias de atraso.
+
+    ⚠ NO ERA UN JOB ROTO: ERA QUE NO HABIA JOB. La serie se cargo una vez desde
+    `CONST_2.xlsx` (ver `api/migrar_historico.py`) y nunca tuvo scraper ni
+    entrada en la cadena. Mientras tanto seguia ofreciendose como indice
+    pactable en `/api/redet/series`, asi que se podia firmar un contrato contra
+    algo que nadie actualizaba.
+
+    ⚠ SOLO DOS COLUMNAS. La pagina publica el indice general y el $/m2; el Excel
+    historico tenia ademas MATERIALES, MANO_DE_OBRA y PROVISIONES, que APYMECO
+    no publica ahi. Los meses nuevos entran con esas tres en NULL a proposito:
+    NULL dice "aca no se publica" y rellenarlas con el ultimo valor conocido
+    fabricaria una apertura que nadie publico. Juan (13/09/2026) va a pasar la
+    publicacion cada tanto para completarlas a mano.
+
+    ⚠ VARIACION_MENSUAL NO SE GUARDA aunque la pagina la traiga: sale de dividir
+    dos indices que ya estan en la tabla, y un derivado guardado al lado de su
+    fuente termina discrepando por redondeo sin que nadie sepa cual vale.
+
+    ⚠ SE VERIFICO QUE ES EL MISMO INDICE antes de extenderlo: los 7 meses que
+    solapan con la base (ago-2025 a feb-2026) coinciden al centavo. Si no
+    hubieran coincidido, seria otra serie y pegarla habria roto el historico.
+    """
+    serie = apymeco.fetch_apymeco()
+    n = _guardar_ancha("APYMECO", ["INDICE_GENERAL", "PESOS_M2"], serie)
+    print(f"[scheduler] APYMECO +{n} filas · "
+          f"hasta {serie[-1]['FECHA'] if serie else '-'} · "
+          f"materiales/mano de obra/provisiones NO se publican ahi")
+
+
 def refrescar_cac():
     serie = camarco.fetch_cac()
     headers = ["COSTO_CONSTRUCCION", "MATERIALES", "MANO_DE_OBRA"]
@@ -1588,6 +1619,7 @@ FUENTES_MANUALES = {
     "riesgo_pais": refrescar_riesgo_pais,
     "merval": refrescar_merval,
     "cac": refrescar_cac,
+    "apymeco": refrescar_apymeco,
     "uocra": refrescar_uocra,
     "salarios": refrescar_salarios,
     "icc": refrescar_icc,

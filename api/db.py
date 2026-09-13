@@ -170,7 +170,7 @@ SERIES_CONTRATO = {
     "ICC_BUENOS_AIRES": "ICC INDEC - Buenos Aires",
     "ICC_CORDOBA": "ICC INDEC - Cordoba",
     "ICC_SANTA_FE": "ICC INDEC - Santa Fe",
-    "CONSTRUCCION": "Costo de la construccion (INDEC)",
+    "APYMECO": "APYMECO - indice de la construccion (La Plata)",
     "UOCRA": "Jornales UOCRA por categoria",
     "SALARIOS": "Indice de salarios (INDEC)",
     "RIPTE": "RIPTE",
