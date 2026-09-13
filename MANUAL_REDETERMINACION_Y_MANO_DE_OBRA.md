@@ -499,10 +499,32 @@ social se calcula sobre el mes.** Y el motivo está en los topes.
 El «3 % de obra social» **son dos conceptos**: Anssal 0,45 % + Obra Social
 2,55 %. Y el total patronal de 27 % / 23,9 % encierra el 26,4 % que usa CAMARCO.
 
-**Los topes, con su norma:**
+**Los topes, con su norma.** ⚠ **Los importes NO salen del Excel: se bajan de
+ARCA.** El libro es de 2019 y decía mínima 3.004,25 / máxima 97.637,14 — al
+09/2026 van en **144.363,55 / 4.691.748,47**, cuarenta y ocho veces más. Un tope
+viejo no falla: calcula, y calcula mal. Y desde la reforma ANSES los fija **mes a
+mes** por IPC, así que cualquier cosa que los tenga escritos a mano queda vieja
+en treinta días.
 
-- **Jubilación**: mínimo 3.004,25 · máximo aportes 97.637,14. El mínimo **no
-  aplica al Contrato a Tiempo Parcial** (LCT art. 92 ter).
+```bash
+cd indices && py api/exportar_drive.py --solo topes    # los deja al día
+py scrapers/arca_topes.py                              # los muestra
+py scrapers/arca_topes.py --historico                  # reconstruye la serie
+```
+
+Quedan en `arca_bases_imponibles.csv` (23 meses, jul-2024 → sep-2026, con la
+resolución ANSES que fija cada uno) y `arca_smvm.csv` (el SMVM, que la misma
+página publica hasta abr-2027). **Ese export ACUMULA en vez de reescribir**: la
+página de ARCA solo muestra los tres meses de la versión vigente, así que sin
+merge cada corrida borraría la historia. Y si la página no contesta, no toca el
+archivo.
+
+⚠ Faltan **2024-09, 2025-01, 2025-10 y 2026-04**: sus versiones del aplicativo
+ya no responden. **No se interpolan** — una serie prolija con un tope inventado
+es peor que un hueco declarado.
+
+- **Jubilación**: el mínimo **no aplica al Contrato a Tiempo Parcial** (LCT art.
+  92 ter).
 - **Contribuciones patronales**: **sin límite máximo**.
 - **Obra Social (REM 4 y 8)**: el mínimo es *«o REM jornada completa»* — el
   D. 921/2016 fija el haber mínimo en **dos bases mínimas**, y **para contrato a
@@ -578,6 +600,8 @@ los tiene: presenta el 931 todos los meses.
 | `uocra_jornales.csv` | básicos y no remunerativos por categoría (Zona A) | 73 |
 | `uocra_adicionales.csv` | aportes, contribuciones y seguro, con vigencia | 4 |
 | `arca_conceptos_sueldo_931.csv` | la tabla oficial de conceptos del F.931 | 112 |
+| `arca_bases_imponibles.csv` | topes mínimo y máximo por mes, de ARCA | 23 |
+| `arca_smvm.csv` | salario mínimo vital y móvil vigente | 9 |
 | `indec_op_conceptos.csv` | los 436 índices por insumo, con su código CPC | 436 |
 | `indec_op_valores.csv` | el valor de hoy de cada uno, por mes | 56.348 |
 | `indec_op_revisiones.csv` | cada valor tal como se leyó en cada bajada | 56.564 |

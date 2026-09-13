@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import datetime as _dt
 import sys
 from pathlib import Path
 
@@ -197,6 +198,50 @@ def exportar_conceptos_931(destino: Path) -> None:
                "relevante_construccion"], cs)
 
 
+def exportar_topes(destino: Path) -> None:
+    """Los topes de la base imponible y el SMVM, de la fuente oficial de ARCA.
+
+    ⚠ ESTE ES EL UNICO EXPORT QUE ACUMULA EN VEZ DE REESCRIBIR. La pagina de
+    ARCA publica solo los tres meses que la version del aplicativo trae; el
+    historico no esta en ningun lado. Si se reescribiera entero como los demas,
+    cada corrida borraria los meses anteriores y nunca se podria reproducir una
+    liquidacion vieja. Se mergea por `vigencia_desde` y el valor nuevo gana.
+
+    ⚠ Y SI LA PAGINA NO CONTESTA NO SE TOCA EL ARCHIVO: un CSV de topes vacio
+    es peor que uno desactualizado, porque el desactualizado al menos dice de
+    cuando es.
+    """
+    import arca_topes
+    d = arca_topes.fetch_topes()
+    res = ",".join(d["resoluciones"])
+
+    def merge(nombre, cols, clave, nuevas):
+        viejas = {}
+        ruta = destino / nombre
+        if ruta.exists():
+            with open(ruta, encoding="utf-8-sig", newline="") as fh:
+                for f in csv.DictReader(fh, delimiter=";"):
+                    viejas[f[clave]] = f
+        for f in nuevas:
+            viejas[f[clave]] = f
+        filas = [viejas[k] for k in sorted(viejas)]
+        _escribir(destino, nombre, cols, filas)
+
+    merge("arca_bases_imponibles.csv",
+          ["vigencia_desde", "minima", "maxima", "resoluciones", "leido_el"],
+          "vigencia_desde",
+          [{"vigencia_desde": b["vigencia_desde"], "minima": b["minima"],
+            "maxima": b["maxima"], "resoluciones": res,
+            "leido_el": _dt.date.today().isoformat()} for b in d["bases"]])
+
+    merge("arca_smvm.csv",
+          ["desde", "hasta", "monto", "resoluciones", "leido_el"], "desde",
+          [{"desde": x["desde"], "hasta": x["hasta"], "monto": x["monto"],
+            "resoluciones": res, "leido_el": _dt.date.today().isoformat()}
+           for x in d["smvm"]])
+    print("   (version %s · resoluciones %s)" % (d["url"].split("/")[-1], res))
+
+
 # ── INDEC ───────────────────────────────────────────────────────────────────
 
 def exportar_indec(destino: Path) -> None:
@@ -228,6 +273,7 @@ def exportar_indec(destino: Path) -> None:
 
 TAREAS = {
     "cargas": exportar_cargas,
+    "topes": exportar_topes,
     "conceptos931": exportar_conceptos_931,
     "cac": exportar_cac,
     "acuerdos": exportar_acuerdos,
