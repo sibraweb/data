@@ -464,6 +464,79 @@ para la suma no remunerativa**. Por eso el no remunerativo va $59.100 en una
 quincena y $36.938 en la otra — se prorratea sobre 176, no sobre las horas
 trabajadas.
 
+### El Excel real — lo que cierra todo
+
+Juan encontró el libro completo (`UOCRA F931 EXCEL DEMO.xlsx`, 70 hojas, versión
+2019). Ahí están las fórmulas, los topes y las citas legales. Extraído a
+`referencia/uocra_f931_alicuotas_y_topes.csv`.
+
+**Las bases son TRES distintas, y el Excel las nombra:**
+
+```
+Jubilación      = subtotal remunerativo de la QUINCENA × 0,11
+Ley 19.032      = subtotal remunerativo de la QUINCENA × 0,03
+Sindicato       = subtotal remunerativo de la QUINCENA × 0,025
+Obra Social     = base MENSUAL × 0,03        ← el Excel la rotula «BASE R4 Y 8»
+Seguro de Vida  = (sueldo + falta + plus feriado) × 0,02
+```
+
+La base de Obra Social está etiquetada con el nombre del bucket de ARCA —
+**REM 4 y REM 8** — y vale el doble de la quincena. **Juan tenía razón: la obra
+social se calcula sobre el mes.** Y el motivo está en los topes.
+
+**El desglose real de las alícuotas (hoja `TOPESF931`):**
+
+| | aporte del trabajador | | contribución DTO 814 A | DTO 814 B |
+|---|---:|---|---:|---:|
+| REM 1 · SIPA | 11,00 % | REM 7 · Jubilación | 12,71 % | 10,17 % |
+| REM 2 · INSSJP | 3,00 % | REM 8 · INSSJP | 1,62 % | 1,50 % |
+| REM 3 · Anssal | **0,45 %** | REM 9 · FNE | 1,11 % | 0,89 % |
+| REM 4 · Obra Social | **2,55 %** | Anssal | 0,90 % | 0,90 % |
+| **REM 5 · TOTAL** | **17,00 %** | Asig. Familiares | 5,56 % | 4,44 % |
+| | | Contrib. Obra Social | 5,10 % | 6,00 % |
+| | | **TOTAL** | **27,00 %** | **23,90 %** |
+
+El «3 % de obra social» **son dos conceptos**: Anssal 0,45 % + Obra Social
+2,55 %. Y el total patronal de 27 % / 23,9 % encierra el 26,4 % que usa CAMARCO.
+
+**Los topes, con su norma:**
+
+- **Jubilación**: mínimo 3.004,25 · máximo aportes 97.637,14. El mínimo **no
+  aplica al Contrato a Tiempo Parcial** (LCT art. 92 ter).
+- **Contribuciones patronales**: **sin límite máximo**.
+- **Obra Social (REM 4 y 8)**: el mínimo es *«o REM jornada completa»* — el
+  D. 921/2016 fija el haber mínimo en **dos bases mínimas**, y **para contrato a
+  tiempo parcial los aportes de obra social son los de un trabajador a tiempo
+  completo**. Ahí está por qué la base de obra social no sigue a las horas
+  trabajadas.
+- **ART**: la base es **remuneraciones + conceptos no remunerativos**
+  (L. 26773 art. 10, D. 472/2014), y **los viáticos no entran** (Dict. SRT
+  221/2016).
+
+### IERIC: es el 1 % del Fondo de Cese, no del sueldo
+
+La hoja `IERIC` lo encadena y se verificó al cuarto decimal:
+
+```
+base remunerativa del F931   35.843,57
+  × 12 %  →  Fondo de Cese    4.301,2284
+  ×  1 %  →  IERIC a pagar        43,0123
+```
+
+**Y la base del fondo de cese tiene reglamentación propia** — Art. 5 del
+Decreto 1342/81, citado en la hoja: el aporte **no** se practica sobre
+
+- el **SAC**;
+- los **recargos** de horas suplementarias (el 50 % o el 100 % de recargo; **el
+  valor normal de la hora extra SÍ integra la base**);
+- las **indemnizaciones** de cualquier naturaleza.
+
+Y durante incapacidad laboral temporaria por accidente, el aporte se hace sobre
+la prestación dineraria devengada (D. 491/97 art. 25).
+
+> Esto corrige lo que dije antes: **el Seguro de Vida del recibo es 2 %**, no
+> 3 %. El 3 % del PDF de demostración era de esa plantilla, no del convenio.
+
 ### Qué falta para la hora recibo
 
 Los porcentajes de los descuentos (11 / 3 / 3 / 2) vienen de fuentes
