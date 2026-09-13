@@ -5,10 +5,11 @@
     py api/cargar_indec_op.py archivo.xls  # usa un .xls ya bajado
     py api/cargar_indec_op.py --solo-leer  # no escribe: dice qué traería
 
-Idempotente: reescribe cada (grupo, código, origen, cuadro, período) con el
-valor de la publicación de hoy. INDEC corrige hacia atrás los meses marcados
-como provisorios (*), así que la carga tiene que pisar lo viejo y no
-limitarse a agregar los meses nuevos.
+Idempotente y barata: deja la base igual a la publicación de hoy escribiendo
+SOLO lo que cambió. INDEC corrige hacia atrás los meses marcados como
+provisorios (*), así que la carga tiene que poder pisar lo viejo y no limitarse
+a agregar los meses nuevos — pero de 56.348 valores se mueven ~3.500 por mes.
+Una corrida sin novedades tarda 10 s y no escribe nada.
 
 ⚠ `db.py` lee `os.environ` recién al conectar y NO carga el `.env`: por eso el
 `load_dotenv` de acá abajo va ANTES de importar `db`.
@@ -57,6 +58,10 @@ def registrar_revision(filas: list[dict], foto: str) -> tuple[int, int, int]:
     de la anterior. La primera foto entra entera (es la línea de base); las
     siguientes, solo las series corregidas.
 
+    Devuelve (nuevos, corregidas, confirmadas) — ⚠ TRES números. El camino
+    corto de abajo devolvía dos y reventaba con ValueError al desempaquetar, y
+    es justo el que toma el job cuando corre dos veces el mismo día.
+
     ⚠ Las fotos tienen que cargarse en orden cronológico: el delta se calcula
     contra la última foto ANTERIOR a esta. Si ya hay una posterior cargada,
     avisa y no escribe — un delta calculado al revés miente en las dos filas.
@@ -67,7 +72,7 @@ def registrar_revision(filas: list[dict], foto: str) -> tuple[int, int, int]:
         cur.execute("SELECT count(*) n FROM indec_op_revisiones WHERE foto >= %s", (foto,))
         if cur.fetchone()["n"]:
             print(f"⚠ ya hay revisiones con foto >= {foto}: no se registra nada.")
-            return 0, 0
+            return 0, 0, 0
         cur.execute(
             """SELECT DISTINCT ON (grupo, codigo, origen, cuadro, periodo)
                       grupo, codigo, origen, cuadro, periodo, indice, provisorio
@@ -134,8 +139,28 @@ def _igual(a, b) -> bool:
 
 
 def guardar(filas: list[dict]) -> tuple[int, int]:
+    """Deja `indec_op_valores` igual a la publicación de hoy.
+
+    Escribe SOLO lo que cambió. El .xls trae 56.348 valores y de un mes al otro
+    se mueven ~3.500 (el mes nuevo) más un puñado de correcciones: reescribirlo
+    entero costaba 53 s por corrida para actualizar el 6 %.
+    """
     conceptos = _conceptos(filas)
     with db._conectar() as cx, cx.cursor() as cur:
+        cur.execute("""SELECT grupo, codigo, origen, cuadro, periodo, indice, provisorio
+                         FROM indec_op_valores""")
+        actual = {(r["grupo"], r["codigo"], r["origen"], r["cuadro"],
+                   r["periodo"].isoformat()): (r["indice"], r["provisorio"])
+                  for r in cur.fetchall()}
+        cambiadas = []
+        for f in filas:
+            clave = (f["grupo"], f["codigo"], f["origen"], f["cuadro"], f["periodo"])
+            previo = actual.get(clave)
+            # El flag entra en la comparación igual que en `registrar_revision`:
+            # un mes que pasa a definitivo sin cambiar de valor también se escribe.
+            if previo and _igual(previo[0], f["indice"]) and previo[1] == f["provisorio"]:
+                continue
+            cambiadas.append(f)
         cur.executemany(
             """INSERT INTO indec_op_conceptos
                    (grupo, codigo, origen, cuadro, descripcion, publicacion,
@@ -150,19 +175,25 @@ def guardar(filas: list[dict]) -> tuple[int, int]:
                    nivel = EXCLUDED.nivel""",
             conceptos,
         )
-        cur.executemany(
-            """INSERT INTO indec_op_valores
-                   (grupo, codigo, origen, cuadro, periodo, indice, provisorio)
-               VALUES (%(grupo)s, %(codigo)s, %(origen)s, %(cuadro)s,
-                       %(periodo)s, %(indice)s, %(provisorio)s)
-               ON CONFLICT (grupo, codigo, origen, cuadro, periodo) DO UPDATE SET
-                   indice = EXCLUDED.indice,
-                   provisorio = EXCLUDED.provisorio""",
-            [{k: f[k] for k in ("grupo", "codigo", "origen", "cuadro",
-                                "periodo", "indice", "provisorio")} for f in filas],
-        )
+        # De a lotes, por la misma razón que en `registrar_revision`: un
+        # executemany de decenas de miles de filas corta la conexión SSL.
+        datos = [{k: f[k] for k in ("grupo", "codigo", "origen", "cuadro",
+                                    "periodo", "indice", "provisorio")}
+                 for f in cambiadas]
+        for i in range(0, len(datos), 5000):
+            cur.executemany(
+                """INSERT INTO indec_op_valores
+                       (grupo, codigo, origen, cuadro, periodo, indice, provisorio)
+                   VALUES (%(grupo)s, %(codigo)s, %(origen)s, %(cuadro)s,
+                           %(periodo)s, %(indice)s, %(provisorio)s)
+                   ON CONFLICT (grupo, codigo, origen, cuadro, periodo) DO UPDATE SET
+                       indice = EXCLUDED.indice,
+                       provisorio = EXCLUDED.provisorio""",
+                datos[i:i + 5000],
+            )
+            cx.commit()
         cx.commit()
-    return len(conceptos), len(filas)
+    return len(conceptos), len(cambiadas)
 
 
 def main() -> int:
@@ -211,7 +242,8 @@ def main() -> int:
         return 0
 
     n_conceptos, n_valores = guardar(filas)
-    print(f"guardado: {n_conceptos} conceptos, {n_valores} valores")
+    print(f"guardado: {n_conceptos} conceptos, {n_valores} valores cambiados "
+          f"(de {len(filas)} que trae la publicación)")
     return 0
 
 
