@@ -381,11 +381,41 @@ aritmética:
    `costo / jornal puro = 2,2002` — y **sin el fondo de cese**, que no tiene
    renglón. Agregándole el 12 % daría **2,3442**.
 
-> ⚠ **Dos renglones del demo se contradicen entre quincenas**: la base de *Obra
-> Social* (Q1 sobre rem + no rem = 529.231; Q2 sobre 391.776) y la de *Seguro de
-> Vida* (Q1 sobre 269.626; Q2 sobre 766.175). Y las contribuciones patronales
-> están **fijas en $332.772 en las dos** aunque el remunerativo pase de 470.131
-> a 729.238. Es una plantilla de demostración: sirve para la MECÁNICA.
+### ⚠ El bloque del empleador es MENSUAL, no de la quincena
+
+Esto se me pasó y lo corrigió Juan. Las contribuciones aparecen **idénticas en
+los dos recibos** ($332.772) y parecía un error de la plantilla. No lo es:
+
+```
+Q1 remuneraciones (rem + no rem)      529.231
+Q2 remuneraciones (rem + no rem)      766.176
+SUMA DEL MES                        1.295.407
+base de ART que muestran los dos     1.295.406   ← coincide, 1 peso de redondeo
+```
+
+**Es la cifra del MES, mostrada como referencia en cada quincena.** Cualquier
+cosa que lea ese bloque como "costo de esta quincena" lo cuenta dos veces.
+
+De los otros dos renglones, uno sí es un error puntual y el otro sigue abierto:
+
+- **Obra Social.** La hipótesis de que se reparte por quincena se probó y no da:
+  las dos bases suman 921.007 contra 1.295.407 del mes, el 3 % del mes son
+  38.862 contra 27.630 efectivamente cobrados, y la mitad del mes (647.704) no
+  coincide con ninguna. Lo que sí: **391.776 es exactamente el renglón de horas
+  normales de la PRIMERA quincena** (88 × 4.452), así que la celda de la segunda
+  apunta a la fila equivocada. Manda la fórmula del JS:
+  `(remunerativo + no remunerativo) × 3 %`.
+- **Seguro de vida: son TRES conceptos distintos y es fácil mezclarlos.**
+
+| renglón | quién lo paga | base |
+|---|---|---|
+| `Seguro de Vida 3 %` | **descuento** al trabajador | 269.626 (Q1) / 766.175 (Q2, = sus remuneraciones) |
+| `Seguro de vida fijo $425` | **contribución** del empleador | importe fijo por trabajador |
+| `serenoZonaA × 2 %` (el del JS y del CCT) | empleador, dentro del item h de CAMARCO | básico Sereno Zona A: $881.193 × 2 % = $17.623,86/mes |
+
+  El 3 % que descuenta el recibo **no** sale de la fórmula del CCT: los $8.089 y
+  $22.985 suman $31.074 contra los $17.624 del 2 % sobre el Sereno. **Ese
+  renglón queda sin resolver** y hay que mirarlo en un recibo real.
 
 ### Las fórmulas, con su base explícita
 
