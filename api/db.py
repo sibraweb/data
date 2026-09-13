@@ -476,9 +476,11 @@ def upsert_valores_simple(serie: str, rows: list[dict], fecha_col: str = "FECHA"
                    ON CONFLICT (serie, columna, fecha) DO NOTHING""",
                 tuplas,
             )
+            insertadas = cur.rowcount
         conn.commit()
     _cache_bust(f"simple:{serie}")
-    return len(tuplas)
+    # ⚠ -1 es «psycopg no sabe», no «una fila»: se normaliza a 0
+    return max(insertadas, 0)
 
 
 def upsert_resumen_publico(filas: list[dict]) -> int:
@@ -509,8 +511,13 @@ def upsert_resumen_publico(filas: list[dict]) -> int:
                     ON CONFLICT (clave) DO UPDATE SET {setter}, actualizado = now()""",
                 tuplas,
             )
+            # ⚠ este es DO UPDATE, no DO NOTHING: rowcount cuenta insertadas MAS
+            # actualizadas, asi que da el total de filas tocadas. Es lo correcto
+            # para el resumen publico, que se reescribe entero en cada corrida.
+            insertadas = cur.rowcount
         conn.commit()
-    return len(tuplas)
+    # ⚠ -1 es «psycopg no sabe», no «una fila»: se normaliza a 0
+    return max(insertadas, 0)
 
 
 def upsert_valores_ancha(serie: str, fecha: str, valores: dict) -> int:
@@ -531,9 +538,11 @@ def upsert_valores_ancha(serie: str, fecha: str, valores: dict) -> int:
                    ON CONFLICT (serie, columna, fecha) DO NOTHING""",
                 tuplas,
             )
+            insertadas = cur.rowcount
         conn.commit()
     _cache_bust(f"ancha:{serie}")
-    return len(tuplas)
+    # ⚠ -1 es «psycopg no sabe», no «una fila»: se normaliza a 0
+    return max(insertadas, 0)
 
 
 def leer_rem(tipo: str) -> list[dict]:
@@ -590,9 +599,11 @@ def upsert_rem_bulk(tipo: str, registros: list[dict]) -> int:
                    ON CONFLICT (tipo, fecha_pronostico, periodo) DO NOTHING""",
                 tuplas,
             )
+            insertadas = cur.rowcount
         conn.commit()
     _cache_bust(f"rem:{tipo}")
-    return len(tuplas)
+    # ⚠ -1 es «psycopg no sabe», no «una fila»: se normaliza a 0
+    return max(insertadas, 0)
 
 
 def leer_uocra_adicionales() -> list[dict]:
@@ -660,9 +671,11 @@ def upsert_uocra_adicionales_bulk(registros: list[dict]) -> int:
                        hasta        = EXCLUDED.hasta""",
                 tuplas,
             )
+            insertadas = cur.rowcount
         conn.commit()
     _cache_bust("uocra_adicionales")
-    return len(tuplas)
+    # ⚠ -1 es «psycopg no sabe», no «una fila»: se normaliza a 0
+    return max(insertadas, 0)
 
 
 def leer_materiales_historico(id_proveedor: str) -> list[dict]:
@@ -764,9 +777,11 @@ def upsert_materiales_historico_bulk(registros: list[dict]) -> int:
                    ON CONFLICT (id_proveedor, descripcion, fecha) DO NOTHING""",
                 tuplas,
             )
+            insertadas = cur.rowcount
         conn.commit()
     _cache_bust("materiales:")
-    return len(tuplas)
+    # ⚠ -1 es «psycopg no sabe», no «una fila»: se normaliza a 0
+    return max(insertadas, 0)
 
 
 def upsert_valores_ancha_bulk(serie: str, registros: list[dict], headers: list[str], fecha_col: str = "FECHA") -> int:
@@ -795,9 +810,11 @@ def upsert_valores_ancha_bulk(serie: str, registros: list[dict], headers: list[s
                    ON CONFLICT (serie, columna, fecha) DO NOTHING""",
                 tuplas,
             )
+            insertadas = cur.rowcount
         conn.commit()
     _cache_bust(f"ancha:{serie}")
-    return len(tuplas)
+    # ⚠ -1 es «psycopg no sabe», no «una fila»: se normaliza a 0
+    return max(insertadas, 0)
 
 
 def guardar_curva_cauciones(curva: list[dict]) -> int:
