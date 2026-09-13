@@ -784,6 +784,79 @@ def upsert_materiales_historico_bulk(registros: list[dict]) -> int:
     return max(insertadas, 0)
 
 
+def corregir_valores_ancha(serie: str, filas: list[dict], headers: list[str],
+                           fuente: str, motivo: str = "",
+                           fecha_col: str = "FECHA") -> dict:
+    """PISA valores ya cargados, y deja constancia de cada uno en `series_correcciones`.
+
+    ⚠ ESTO ROMPE EL APPEND-ONLY A PROPOSITO, y por eso pide `fuente`. La regla
+    del proyecto es que un upsert nunca corrige (PROCESO.md), porque un valor
+    que cambia solo es un valor en el que no se puede confiar. Cuando la fuente
+    demuestra que lo cargado esta mal, la salida no es callarse ni pisar en
+    silencio: es pisar DEJANDO ESCRITO que era, que quedo y que documento lo
+    probo. Si un certificado se liquido con el numero viejo, se puede ver.
+
+    ⚠ SOLO ESCRIBE LO QUE DIFIERE. Un valor identico no genera fila de
+    correccion —si no, el registro se llena de ruido y el dia que haya una
+    correccion de verdad no se ve—. Un valor que la base no tenia se INSERTA
+    normal y tampoco es una correccion.
+
+    Devuelve {"corregidos": n, "nuevos": n, "iguales": n}.
+    """
+    if not filas:
+        return {"corregidos": 0, "nuevos": 0, "iguales": 0}
+
+    previo = {}
+    for r in leer_serie_ancha(serie):
+        for col in headers:
+            v = r.get(col)
+            if v not in (None, ""):
+                previo[(col, r.get(fecha_col))] = float(v)
+
+    correcciones, nuevos, iguales = [], [], 0
+    for r in filas:
+        fecha = r.get(fecha_col)
+        if not fecha:
+            continue
+        for col in headers:
+            val = _num(r.get(col))
+            if val is None:
+                continue
+            viejo = previo.get((col, fecha))
+            if viejo is None:
+                nuevos.append((serie, col, fecha, val))
+            elif abs(viejo - val) > 0.01:
+                correcciones.append((serie, col, fecha, viejo, val))
+            else:
+                iguales += 1
+
+    with _conectar() as conn:
+        with conn.cursor() as cur:
+            if nuevos:
+                cur.executemany(
+                    """INSERT INTO series_valores (serie, columna, fecha, valor)
+                       VALUES (%s,%s,%s,%s)
+                       ON CONFLICT (serie, columna, fecha) DO NOTHING""", nuevos)
+            if correcciones:
+                # ⚠ primero la constancia y despues el dato, en la MISMA
+                # transaccion: si el registro falla, el valor no se pisa. Al
+                # reves se podria perder la trazabilidad y quedarse con el
+                # valor nuevo sin saber cual era el viejo.
+                cur.executemany(
+                    """INSERT INTO series_correcciones
+                           (serie, columna, fecha, valor_anterior, valor_nuevo,
+                            fuente, motivo)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                    [(a, b, c, d, e, fuente, motivo) for a, b, c, d, e in correcciones])
+                cur.executemany(
+                    """UPDATE series_valores SET valor = %s
+                        WHERE serie = %s AND columna = %s AND fecha = %s""",
+                    [(e, a, b, c) for a, b, c, d, e in correcciones])
+        conn.commit()
+    _cache_bust(f"ancha:{serie}", f"simple:{serie}")
+    return {"corregidos": len(correcciones), "nuevos": len(nuevos), "iguales": iguales}
+
+
 def upsert_valores_ancha_bulk(serie: str, registros: list[dict], headers: list[str], fecha_col: str = "FECHA") -> int:
     """Como upsert_valores_ancha pero para TODAS las filas de una pestaña de
     una sola vez: una única conexión + un único executemany, en vez de

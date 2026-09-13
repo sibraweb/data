@@ -60,6 +60,13 @@ def main() -> int:
     # la regla append-only del proyecto. Corregir los 52 valores viejos es otra
     # decision y la tiene que tomar una persona.
     ap.add_argument("--solo-faltantes", action="store_true")
+    # ⚠ PISA LO CARGADO. Se uso el 13/09/2026 por decision de Juan («corregimos
+    # todo con este archivo») despues de probar que APYMECO NO revisa su
+    # indice: cuatro informes entre 2020 y 2026, 73 meses solapados, cero
+    # diferencias. O sea que los 52 valores que discrepaban eran del Excel
+    # historico, no correcciones de la camara. Cada valor pisado queda en
+    # `series_correcciones` con el anterior, el nuevo y de que informe salio.
+    ap.add_argument("--corregir", action="store_true")
     args = ap.parse_args()
 
     filas = apymeco.fetch_apymeco_pdf(args.pdf)
@@ -92,6 +99,21 @@ def main() -> int:
     # ⚠ el umbral es por PROPORCION, no por cantidad: un par de correcciones de
     # centavos es normal, pero si difiere mas de la decima parte de lo cotejado
     # es que las columnas estan cruzadas.
+    if args.corregir:
+        if args.solo_leer:
+            print("\n--solo-leer: no se escribio nada.")
+            return 0
+        r = db.corregir_valores_ancha(
+            SERIE, filas, COLUMNAS,
+            fuente=Path(args.pdf).name,
+            motivo="El Excel historico (CONST_2.xlsx) traia valores equivocados. "
+                   "APYMECO no revisa su indice: 4 informes 2020-2026, 73 meses "
+                   "solapados, 0 diferencias.")
+        print("\ncorregidos %d · nuevos %d · ya iguales %d"
+              % (r["corregidos"], r["nuevos"], r["iguales"]))
+        print("cada valor pisado quedo en `series_correcciones` con el anterior.")
+        return 0
+
     if args.solo_faltantes and difieren:
         print("\n(--solo-faltantes: esas %d diferencias NO se tocan)" % len(difieren))
     elif cotejados >= 20 and len(difieren) > cotejados * 0.1:
