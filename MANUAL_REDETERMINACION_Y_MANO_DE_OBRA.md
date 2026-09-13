@@ -333,6 +333,61 @@ el 3º, 5 % el 4º — o sea 5 % hoy) **ya está adentro del 39,32 %** de CAMARC
 figura en la legislación del item 10 (Contribuciones patronales – C.U.S.S.) del
 Trabajo 185. **No se suma aparte.**
 
+### Un recibo real, verificado al peso
+
+En `referencia/recibo_ejemplo_UOCRA_1ra_quincena.pdf` y `..._2da_quincena.pdf`
+hay dos recibos completos con números (demo público de un estudio, CCT 76/75,
+Ayudante, junio-2026, jornal $4.452/h). **Cada renglón se verificó y cierra.**
+
+**1ª quincena — sin faltas:**
+
+| concepto | cálculo | monto |
+|---|---|---:|
+| Horas normales | 88 h × 4.452 | 391.776 |
+| **Asistencia perfecta** | **20 % de las normales** | 78.355 |
+| Suma No Remunerativa | — | *59.100* |
+| **REMUNERATIVO** | normales + asistencia | **470.131** |
+| Jubilación | 11 % del remunerativo | −51.714 |
+| Ley 19.032 | 3 % del remunerativo | −14.104 |
+| Sindicato | **2,5 %** del remunerativo | −11.753 |
+| **NETO** | rem + no rem − descuentos | **427.694** |
+
+**2ª quincena — con 24 h de falta injustificada:**
+
+| concepto | cálculo | monto |
+|---|---|---:|
+| Horas normales | 90 h × 4.452 | 400.680 |
+| Feriado | 8 h × 4.452 | 35.616 |
+| **Falta injustificada** | **24 h × 4.452, EN NEGATIVO** | **−106.848** |
+| **Asistencia perfecta** | **CERO — se pierde entera por la falta** | **0** |
+| SAC 1er semestre | — | 399.790 |
+| **REMUNERATIVO** | normales + feriado − falta + SAC | **729.238** |
+
+De acá salen las reglas que el módulo necesita, todas confirmadas por
+aritmética:
+
+1. **El premio asistencia es 20 % y se pierde ENTERO** con una falta
+   injustificada. No se prorratea. (Y por eso el 18 % de CAMARCO es un promedio:
+   20 % × 90 % de los operarios.)
+2. **La falta injustificada se descuenta como renglón negativo** del
+   remunerativo, en horas × jornal — no reduce las "horas normales".
+3. **El feriado y los días de lluvia tienen renglón propio**, separados de las
+   horas normales. (En los dos ejemplos la lluvia va en cero, pero el renglón
+   existe.)
+4. **Jubilación 11 %, Ley 19.032 3 % y Sindicato 2,5 %** van sobre el
+   **remunerativo**, no sobre el total. El sindicato es **2,5 %**, no 2 % como
+   dicen las guías que circulan.
+5. **Costo del empleador = remuneraciones + contribuciones.** En este ejemplo,
+   `costo / jornal puro = 2,2002` — y **sin el fondo de cese**, que no tiene
+   renglón. Agregándole el 12 % daría **2,3442**.
+
+> ⚠ **Dos renglones del demo NO se pueden copiar**: la base de *Obra Social*
+> cambia entre quincenas (Q1 sobre rem + no rem = 529.231; Q2 sobre 391.776) y
+> la de *Seguro de Vida* también (Q1 sobre 269.626; Q2 sobre 766.175). Y las
+> contribuciones patronales están **fijas en $332.772 en las dos** aunque el
+> remunerativo pase de 470.131 a 729.238. Son plantillas de demostración: sirven
+> para la MECÁNICA, no para los topes ni las bases de esos dos conceptos.
+
 ### Qué falta para la hora recibo
 
 Los porcentajes de los descuentos (11 / 3 / 3 / 2) vienen de fuentes
