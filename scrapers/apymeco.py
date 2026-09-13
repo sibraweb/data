@@ -147,11 +147,32 @@ def fetch_apymeco_pdf(ruta: str) -> list[dict]:
             "PROVISIONES": _plata(m.group(5)),
             "INDICE_GENERAL": _plata(m.group(6)),
         })
-    # ⚠ el PDF repite el encabezado cada 12 filas y algun mes puede venir dos
-    # veces; gana el ultimo, que es el de la tabla mas reciente
-    unicos = {}
+    # ⚠ UN MES REPETIDO CON OTROS VALORES ES UN ERROR DEL INFORME, Y SE AVISA.
+    # Antes hacia `unicos[fecha] = f` y se quedaba con el ultimo, en silencio.
+    # Eso TAPO un error real: el informe de nov-2021 escribe "jul-19" dos veces
+    # —la segunda son los valores de jul-20— y APYMECO lo corrigio para el
+    # informe de ago-2026. Con el dedup mudo, esa fila entraba como jul-2019 con
+    # los numeros de 2020 y parecia que la camara habia revisado su serie.
+    # Ahora se descarta la repetida y se imprime, porque un mes duplicado quiere
+    # decir que hay una etiqueta mal y la fila siguiente tambien puede estar
+    # corrida.
+    unicos: dict[str, dict] = {}
+    repetidos = []
     for f in filas:
-        unicos[f["FECHA"]] = f
+        previo = unicos.get(f["FECHA"])
+        if previo is None:
+            unicos[f["FECHA"]] = f
+            continue
+        distinto = any(abs((previo.get(c) or 0) - (f.get(c) or 0)) > 0.01
+                       for c in ("MANO_DE_OBRA", "MATERIALES", "PROVISIONES",
+                                 "INDICE_GENERAL"))
+        if distinto:
+            repetidos.append((f["FECHA"], previo, f))
+    for fecha, a, b in repetidos:
+        print("   ⚠ %s aparece dos veces con valores distintos en el informe. "
+              "Se toma la PRIMERA (%.2f) y se descarta (%.2f). Hay una etiqueta "
+              "de mes mal en el PDF."
+              % (fecha, a.get("INDICE_GENERAL") or 0, b.get("INDICE_GENERAL") or 0))
     return [unicos[k] for k in sorted(unicos)]
 
 
