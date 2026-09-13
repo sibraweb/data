@@ -148,6 +148,156 @@ def frescura() -> list[dict]:
     return out
 
 
+# ── Redeterminacion por indice de contrato ──────────────────────────────────
+#
+# ⚠ ESTO NO ES LA POLINOMICA DE INDEC. Juan, 2026-09-13: *«cuando cerramos una
+# orden de venta definimos el indice con el cliente, por ejemplo camarco; cuando
+# determinamos una orden de trabajo con un proveedor definimos con el el indice,
+# por ejemplo uocra»*. Es UN indice por contrato, pactado al firmar. La base de
+# 436 insumos de INDEC (`indec_op_*`) es otra cosa: *«por ahora va a ser solo un
+# control de gestion»*, para comparar contra proveedores y MercadoLibre.
+#
+# Por eso el calculo vive aca y no en Obra: Obra pide el salto y no tiene que
+# saber la regla del mes anterior ni como se busca un mes en cada serie.
+
+# Series que sirven como indice de contrato. No es un filtro de seguridad: es
+# para que la pantalla ofrezca estas y no BADLAR o el riesgo pais, que estan en
+# la misma tabla y no son indices de ajuste de obra.
+SERIES_CONTRATO = {
+    "CAC": "CAMARCO - costo de la construccion",
+    "ICC_CABA": "ICC INDEC - CABA",
+    "ICC_BUENOS_AIRES": "ICC INDEC - Buenos Aires",
+    "ICC_CORDOBA": "ICC INDEC - Cordoba",
+    "ICC_SANTA_FE": "ICC INDEC - Santa Fe",
+    "CONSTRUCCION": "Costo de la construccion (INDEC)",
+    "UOCRA": "Jornales UOCRA por categoria",
+    "SALARIOS": "Indice de salarios (INDEC)",
+    "RIPTE": "RIPTE",
+    "SMVM": "Salario minimo vital y movil",
+    "INFLACION_INDEC": "IPC (INDEC)",
+    "CER": "CER",
+    "UVA": "UVA",
+    "UVI": "UVI",
+    "ICL": "ICL (alquileres)",
+}
+
+
+def redet_series() -> list[dict]:
+    """Los indices que se pueden pactar en un contrato, con sus columnas.
+
+    Devuelve tambien hasta que mes llega cada uno: un contrato con un indice que
+    dejo de publicarse no se puede redeterminar, y eso hay que verlo ANTES de
+    firmar, no cuando hay que emitir el certificado.
+    """
+    with _conectar() as cx, cx.cursor() as cur:
+        cur.execute("""
+            SELECT serie, columna, COUNT(*) AS n, MAX(fecha) AS hasta
+              FROM series_valores
+             WHERE serie = ANY(%s)
+             GROUP BY serie, columna
+             ORDER BY serie, columna""", (list(SERIES_CONTRATO),))
+        filas = cur.fetchall()
+    out: dict[str, dict] = {}
+    for f in filas:
+        d = out.setdefault(f["serie"], {
+            "serie": f["serie"], "nombre": SERIES_CONTRATO[f["serie"]],
+            "columnas": [], "hasta": None,
+        })
+        d["columnas"].append({
+            "columna": f["columna"], "valores": f["n"],
+            "hasta": f["hasta"].isoformat() if f["hasta"] else None,
+        })
+        h = f["hasta"].isoformat() if f["hasta"] else None
+        if h and (d["hasta"] is None or h > d["hasta"]):
+            d["hasta"] = h
+    return [out[k] for k in sorted(out)]
+
+
+def redet_valor_mes(serie: str, columna: str, periodo: str) -> dict | None:
+    """El valor de un indice en un MES. `periodo` es "YYYY-MM".
+
+    ⚠ NO SE BUSCA POR FECHA EXACTA. Cada serie fecha el mes a su manera: CAC e
+    ICC guardan fin de mes (2026-07-31), UOCRA guarda el primero (2026-08-01).
+    Pedir una fecha puntual devolvia None para la mitad de las series sin decir
+    por que. Se busca dentro del mes calendario.
+
+    ⚠ Y SI LA SERIE ES DIARIA (CER, UVA, ICL) SE TOMA EL ULTIMO DIA DEL MES, y
+    la respuesta lo dice en `dias_en_el_mes`. Es una convencion elegida, no un
+    dato del contrato: un contrato en CER suele fijar una fecha exacta. Si
+    `dias_en_el_mes` viene > 1, quien consume tiene que decidir a conciencia.
+    """
+    with _conectar() as cx, cx.cursor() as cur:
+        cur.execute("""
+            SELECT fecha, valor, COUNT(*) OVER () AS dias
+              FROM series_valores
+             WHERE serie = %s AND columna = %s
+               AND date_trunc('month', fecha) = date_trunc('month', %s::date)
+               AND valor IS NOT NULL
+             ORDER BY fecha DESC
+             LIMIT 1""", (serie, columna, periodo + "-01"))
+        r = cur.fetchone()
+    if not r:
+        return None
+    return {
+        "periodo": periodo,
+        "fecha": r["fecha"].isoformat(),
+        "indice": float(r["valor"]),
+        "dias_en_el_mes": int(r["dias"]),
+    }
+
+
+def _mes_anterior(periodo: str) -> str:
+    """"2026-04" -> "2026-03". La norma de Juan, en las dos puntas."""
+    a, m = (int(x) for x in periodo.split("-")[:2])
+    return f"{a - 1}-12" if m == 1 else f"{a}-{m - 1:02d}"
+
+
+def redet_salto(serie: str, columna: str, base: str, redet: str,
+                mes_anterior: bool = True) -> dict:
+    """El factor de redeterminacion entre dos meses de contrato.
+
+    ⚠ LA REGLA DEL MES ANTERIOR LA APLICA ESTA FUNCION, no quien la llama.
+    Norma de Juan: la redeterminacion se hace SIEMPRE con el indice del mes
+    anterior, en las dos puntas —abril->agosto busca marzo->julio— porque el
+    indice del mes que arranca todavia no esta publicado cuando arranca. Que la
+    aplique Obra, o la planilla, o la persona, es la forma de que un certificado
+    salga con el mes corrido y nadie lo note.
+
+    `mes_anterior=False` existe para el caso en que un contrato pacte otra cosa
+    por escrito. No es el default y la respuesta deja dicho cual se uso.
+    """
+    m_base = _mes_anterior(base) if mes_anterior else base
+    m_redet = _mes_anterior(redet) if mes_anterior else redet
+    v_base = redet_valor_mes(serie, columna, m_base)
+    v_redet = redet_valor_mes(serie, columna, m_redet)
+
+    faltan = [m for m, v in ((m_base, v_base), (m_redet, v_redet)) if v is None]
+    if faltan:
+        return {"error": "sin indice publicado", "faltan": faltan,
+                "serie": serie, "columna": columna}
+    if not v_base["indice"]:
+        return {"error": "el indice base es cero: no se puede dividir",
+                "serie": serie, "columna": columna, "base": v_base}
+
+    factor = v_redet["indice"] / v_base["indice"]
+    return {
+        "serie": serie, "columna": columna,
+        "regla": ("indice del mes anterior en las dos puntas" if mes_anterior
+                  else "indice del mes del contrato (regla del mes anterior DESACTIVADA)"),
+        "mes_contrato_base": base, "mes_contrato_redet": redet,
+        "base": v_base, "redet": v_redet,
+        "factor": factor,
+        "variacion": factor - 1,
+        # ⚠ el aviso viaja con el numero: una serie diaria promediada a mes no
+        # es lo mismo que un indice mensual y el que emite el certificado tiene
+        # que verlo sin ir a buscarlo.
+        "avisos": [a for a in (
+            ("la serie es diaria: se tomo el ULTIMO dia de cada mes"
+             if max(v_base["dias_en_el_mes"], v_redet["dias_en_el_mes"]) > 1 else None),
+        ) if a],
+    }
+
+
 def leer_serie_simple(serie: str) -> list[dict]:
     """Series de una sola columna (ej. CER) -> [{"FECHA": "YYYY-MM-DD", "VALOR": ...}, ...]."""
     key = f"simple:{serie}"

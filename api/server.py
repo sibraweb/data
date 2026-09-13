@@ -1600,6 +1600,78 @@ def estaticos_shared(archivo):
     return send_from_directory(BASE_DIR / "shared", archivo)
 
 
+# ── Redeterminacion: un indice por contrato ─────────────────────────────────
+#
+# La puerta que va a llamar Obra. Juan, 2026-09-13: *«por ahora quiero ir
+# armando en indices esto, y cuando esta armado llamamos los calculos desde
+# obra»*. Por eso la REGLA vive aca: si Obra recibe el factor ya calculado, no
+# hay forma de que un certificado salga con el mes corrido.
+
+@app.get("/api/redet/series")
+def redet_series():
+    """Los indices pactables, con sus columnas y hasta que mes llegan."""
+    try:
+        return jsonify({"series": db.redet_series()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 503
+
+
+@app.get("/api/redet/valor")
+def redet_valor():
+    """Un indice en un mes. `periodo` en YYYY-MM.
+
+    ⚠ Devuelve el mes TAL CUAL se pide: no aplica la regla del mes anterior.
+    Es para mirar la serie. Para liquidar se usa /api/redet/salto, que si la
+    aplica — mezclarlas en un solo endpoint con un flag era la forma segura de
+    que alguien liquide con el mes equivocado.
+    """
+    serie = (request.args.get("serie") or "").strip()
+    columna = (request.args.get("columna") or "_").strip()
+    periodo = (request.args.get("periodo") or "").strip()
+    if not serie or len(periodo) != 7 or periodo[4] != "-":
+        return jsonify({"error": "faltan parametros: serie, periodo (YYYY-MM)"}), 400
+    try:
+        v = db.redet_valor_mes(serie, columna, periodo)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 503
+    if v is None:
+        return jsonify({"error": "sin indice publicado para ese mes",
+                        "serie": serie, "columna": columna,
+                        "periodo": periodo}), 404
+    return jsonify({"serie": serie, "columna": columna, **v})
+
+
+@app.get("/api/redet/salto")
+def redet_salto():
+    """EL CALCULO: el factor entre el mes base del contrato y el de redeterminacion.
+
+        /api/redet/salto?serie=CAC&columna=COSTO_CONSTRUCCION&base=2026-04&redet=2026-08
+
+    Aplica la regla del mes anterior en las dos puntas (marzo y julio en el
+    ejemplo). `mes_anterior=0` la desactiva, para un contrato que pacte otra
+    cosa por escrito; la respuesta deja dicho cual se uso.
+
+    422 y no 200 cuando falta un mes: un factor calculado con una sola punta no
+    existe, y devolver 200 con `error` adentro hace que el consumidor lo pinte
+    como si fuera un numero.
+    """
+    serie = (request.args.get("serie") or "").strip()
+    columna = (request.args.get("columna") or "_").strip()
+    base = (request.args.get("base") or "").strip()
+    redet = (request.args.get("redet") or "").strip()
+    usar_anterior = (request.args.get("mes_anterior") or "1") not in ("0", "false", "no")
+    for nombre, v in (("base", base), ("redet", redet)):
+        if len(v) != 7 or v[4] != "-":
+            return jsonify({"error": f"{nombre} tiene que ser YYYY-MM"}), 400
+    if not serie:
+        return jsonify({"error": "falta serie"}), 400
+    try:
+        r = db.redet_salto(serie, columna, base, redet, mes_anterior=usar_anterior)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 503
+    return (jsonify(r), 422) if r.get("error") else jsonify(r)
+
+
 @app.get("/api/estado-sync")
 def estado_sync():
     """Progreso de la sincronización inicial. El front lo consulta para refrescar
