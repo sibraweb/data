@@ -14,6 +14,7 @@ explícita, no un descuido (ver PROCESO.md, "Upsert: agregar vs corregir").
 
 from __future__ import annotations
 
+import datetime as _dt
 import os
 import time
 from collections import defaultdict
@@ -182,6 +183,107 @@ SERIES_CONTRATO = {
 }
 
 
+def guardar_provisorios(serie: str, filas: list[dict], foto: str | None = None) -> dict:
+    """Registra que meses de `serie` estan provisorios, guardando SOLO los cambios.
+
+    `filas`: [{"FECHA": "2026-07-31", "PROVISORIO": True}, ...]
+
+    ⚠ SOLO LOS DELTAS. La primera corrida entra entera (linea de base); las
+    siguientes escriben unicamente los meses cuyo flag cambio. Si no, serian
+    187 filas por corrida para registrar los 2 o 3 que se movieron.
+
+    ⚠ Y EL DELTA COMPARA EL FLAG, QUE ES LO UNICO QUE HAY. Parece obvio dicho
+    asi, pero en `indec_op_revisiones` el delta comparaba solo el VALOR y por
+    eso el mes que pasaba a definitivo sin cambiar de numero no dejaba fila: la
+    ratificacion —el dato que dice que el provisorio servia— era invisible.
+    Aca el flag ES el dato, asi que no hay forma de repetir ese error, pero
+    queda escrito para que nadie "optimice" comparando el valor.
+
+    Devuelve {"nuevos": n, "cambios": n, "sin_cambio": n}.
+    """
+    if not filas:
+        return {"nuevos": 0, "cambios": 0, "sin_cambio": 0}
+    foto = foto or _dt.date.today().isoformat()
+    ahora = {f["FECHA"]: bool(f["PROVISORIO"]) for f in filas if f.get("FECHA")}
+
+    with _conectar() as cx, cx.cursor() as cur:
+        # ⚠ si ya hay una foto POSTERIOR cargada, el delta se calcularia al
+        # revés y mentiria en las dos filas. Se avisa y no se escribe.
+        cur.execute("SELECT COUNT(*) AS n FROM series_provisorios "
+                    "WHERE serie = %s AND foto > %s", (serie, foto))
+        if cur.fetchone()["n"]:
+            return {"nuevos": 0, "cambios": 0, "sin_cambio": 0,
+                    "error": f"ya hay fotos posteriores a {foto} para {serie}"}
+        cur.execute("""
+            SELECT DISTINCT ON (fecha) fecha, provisorio
+              FROM series_provisorios
+             WHERE serie = %s AND foto <= %s
+             ORDER BY fecha, foto DESC""", (serie, foto))
+        previo = {r["fecha"].isoformat(): r["provisorio"] for r in cur.fetchall()}
+
+        nuevas, cambios, iguales = [], 0, 0
+        for fecha, prov in sorted(ahora.items()):
+            if fecha in previo:
+                if previo[fecha] == prov:
+                    iguales += 1
+                    continue
+                cambios += 1
+            nuevas.append((serie, fecha, foto, prov))
+        if nuevas:
+            cur.executemany(
+                "INSERT INTO series_provisorios (serie, fecha, foto, provisorio) "
+                "VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING", nuevas)
+            cx.commit()
+    _cache_bust("provisorio")
+    return {"nuevos": len(nuevas) - cambios, "cambios": cambios,
+            "sin_cambio": iguales}
+
+
+def estado_provisorio(serie: str, fecha: str) -> bool | None:
+    """Si ese periodo esta provisorio HOY. None = la fuente no lo dice.
+
+    ⚠ None NO ES "definitivo". De las 36 series, hoy solo el CAC publica la
+    distincion; para el resto no se sabe y hay que decirlo asi.
+    """
+    with _conectar() as cx, cx.cursor() as cur:
+        cur.execute("""
+            SELECT provisorio FROM series_provisorios
+             WHERE serie = %s AND fecha = %s
+             ORDER BY foto DESC LIMIT 1""", (serie, fecha))
+        r = cur.fetchone()
+    return None if r is None else bool(r["provisorio"])
+
+
+def historia_provisorio(serie: str) -> list[dict]:
+    """Cada periodo que salio provisorio y cuando lo vimos cerrar.
+
+    Es el equivalente de `revisiones_indec.py` para las series de contrato: con
+    esto se puede contestar "el numero con el que liquide ese certificado sigue
+    siendo el mismo" sin ir a buscar una planilla vieja.
+    """
+    with _conectar() as cx, cx.cursor() as cur:
+        cur.execute("""
+            SELECT fecha,
+                   MIN(foto) FILTER (WHERE provisorio)     AS prov_desde,
+                   MIN(foto) FILTER (WHERE NOT provisorio) AS def_desde
+              FROM series_provisorios
+             WHERE serie = %s
+             GROUP BY fecha ORDER BY fecha""", (serie,))
+        filas = cur.fetchall()
+    out = []
+    for f in filas:
+        pd_, dd = f["prov_desde"], f["def_desde"]
+        out.append({
+            "fecha": f["fecha"].isoformat(),
+            "provisorio_desde": pd_.isoformat() if pd_ else None,
+            "definitivo_desde": dd.isoformat() if dd else None,
+            # ⚠ techo, no plazo: solo sabemos que cerro entre dos bajadas
+            "dias_hasta_verlo_cerrado": (dd - pd_).days if (pd_ and dd) else None,
+            "sigue_provisorio": bool(pd_ and not dd),
+        })
+    return out
+
+
 def redet_series() -> list[dict]:
     """Los indices que se pueden pactar en un contrato, con sus columnas.
 
@@ -243,6 +345,10 @@ def redet_valor_mes(serie: str, columna: str, periodo: str) -> dict | None:
         "fecha": r["fecha"].isoformat(),
         "indice": float(r["valor"]),
         "dias_en_el_mes": int(r["dias"]),
+        # ⚠ TRES ESTADOS: True provisorio, False definitivo, None la fuente no
+        # lo dice. Hoy solo el CAC publica la distincion; devolver False para
+        # las otras 35 series seria afirmar algo que no sabemos.
+        "provisorio": estado_provisorio(serie, r["fecha"].isoformat()),
     }
 
 
@@ -294,7 +400,21 @@ def redet_salto(serie: str, columna: str, base: str, redet: str,
         "avisos": [a for a in (
             ("la serie es diaria: se tomo el ULTIMO dia de cada mes"
              if max(v_base["dias_en_el_mes"], v_redet["dias_en_el_mes"]) > 1 else None),
+            # ⚠ ESTE ES EL AVISO QUE IMPORTA. Si una punta esta provisoria, el
+            # factor puede moverse cuando la fuente la cierre. No bloquea: se
+            # liquida con el provisorio a proposito (norma de Juan). Pero el
+            # que emite el certificado tiene que saber que va a haber que
+            # controlarlo despues, y por eso viaja con el numero.
+            ("PUNTA BASE PROVISORIA (%s): el factor puede cambiar cuando la "
+             "fuente la cierre" % v_base["periodo"]
+             if v_base.get("provisorio") else None),
+            ("PUNTA DE REDETERMINACION PROVISORIA (%s): el factor puede "
+             "cambiar cuando la fuente la cierre" % v_redet["periodo"]
+             if v_redet.get("provisorio") else None),
         ) if a],
+        # para que el consumidor pueda decidir sin leer texto
+        "alguna_punta_provisoria": bool(v_base.get("provisorio")
+                                        or v_redet.get("provisorio")),
     }
 
 
@@ -518,7 +638,26 @@ def upsert_uocra_adicionales_bulk(registros: list[dict]) -> int:
                 """INSERT INTO uocra_adicionales
                    (clave, concepto_num, titulo, texto, acuerdo_ref, valor, unidad, desde, hasta)
                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                   ON CONFLICT (clave) DO NOTHING""",
+                   -- ⚠ DO UPDATE Y NO DO NOTHING. La `clave` incluye el md5
+                   -- del texto, asi que misma clave = mismo contenido y
+                   -- reescribir es idempotente. Con DO NOTHING, tres filas
+                   -- escritas por una version vieja quedaron sin titulo ni
+                   -- texto (medido 13/09/2026: el aporte solidario y la
+                   -- contribucion empresarial estaban en la base sin decir
+                   -- QUE eran) y no habia corrida que las arregle.
+                   -- ⚠ Y OJO CON EL SIGNO DE PORCENTAJE EN ESTE COMENTARIO:
+                   -- psycopg lo lee como placeholder y contesta "incomplete
+                   -- placeholder" sin nombrar el comentario. Si hace falta,
+                   -- va doblado.
+                   ON CONFLICT (clave) DO UPDATE SET
+                       concepto_num = EXCLUDED.concepto_num,
+                       titulo       = EXCLUDED.titulo,
+                       texto        = EXCLUDED.texto,
+                       acuerdo_ref  = EXCLUDED.acuerdo_ref,
+                       valor        = EXCLUDED.valor,
+                       unidad       = EXCLUDED.unidad,
+                       desde        = EXCLUDED.desde,
+                       hasta        = EXCLUDED.hasta""",
                 tuplas,
             )
         conn.commit()

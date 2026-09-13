@@ -1249,6 +1249,23 @@ def refrescar_cac():
     n = _guardar_ancha("CAC", headers, serie)
     print(f"[scheduler] CAC +{n} filas (CAMARCO/cifrasonline no siempre tiene el último mes)")
 
+    # ⚠ EL FLAG DE PROVISORIO VA APARTE Y NO PUEDE TUMBAR LA CARGA. Los valores
+    # salen de la API de iKiwi; el asterisco, de la planilla de cifrasonline
+    # (la API no lo trae). Son dos fuentes: si la segunda no contesta, los
+    # valores igual entraron y el flag queda sin registrar —que es NO SABEMOS,
+    # no "definitivo"—. Reventar acá dejaría la serie sin actualizar por un
+    # dato accesorio.
+    try:
+        flags = camarco.fetch_cac_provisorios()
+        r = db.guardar_provisorios("CAC", flags)
+        prov = [f["FECHA"] for f in flags if f["PROVISORIO"]]
+        print(f"[scheduler] CAC provisorios: {len(prov)} meses marcados "
+              f"({', '.join(prov) or '-'}) · nuevos {r['nuevos']} · "
+              f"pasaron a definitivo o a provisorio {r['cambios']}")
+    except Exception as e:
+        print(f"[scheduler] CAC provisorios: NO se pudo leer el flag ({e}). "
+              f"Los valores se cargaron igual; el flag queda sin registrar.")
+
 
 def refrescar_salarios():
     serie = salarios.fetch_salarios()
