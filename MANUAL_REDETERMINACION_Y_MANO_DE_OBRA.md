@@ -269,7 +269,87 @@ texto completo del acuerdo.
 
 ---
 
-## 6 · Lo que estos archivos NO son
+## 6 · El recibo y el F.931 — la hora recibo
+
+El **Libro de Sueldos Digital** de ARCA es el camino por el que hoy se genera el
+F.931, y **ARCA publica su tabla de conceptos en abierto**. Eso convierte "cómo
+se arma un recibo" en un mapeo contra una tabla publicada, en vez de una
+reconstrucción a partir de blogs. Está en `arca_conceptos_sueldo_931.csv` — 112
+conceptos: 48 remunerativos, 46 no remunerativos, 18 descuentos.
+
+Los que hacen falta para liquidar en construcción (columna
+`relevante_construccion = SI`):
+
+| código | tipo | concepto |
+|---|---|---|
+| `110000` | remunerativo | Sueldo — acá va el jornal |
+| `110007` | remunerativo | Feriado |
+| `120003` | remunerativo | SAC proporcional |
+| `130001` / `130002` | remunerativo | Horas extras al 50 % / al 100 % |
+| `140000` | remunerativo | Zona desfavorable |
+| `160001` | remunerativo | Adicional por antigüedad |
+| `160004` | remunerativo | **Adicional por desarraigo** |
+| `170001` | remunerativo | **Premio por presentismo** — la asistencia perfecta |
+| `170005` | remunerativo | Viáticos sin comprobante |
+| `520003` | no remunerativo | **Provisión de ropa de trabajo** — la "vestimenta" de CAMARCO |
+| `810000` / `810001` / `810002` | descuento | Sistema previsional 11 % · INSSJyP 3 % · Obra Social 3 % |
+| `810004` | descuento | Cuota Sindical — 2 % UOCRA |
+| `810005` | descuento | Seguro de Vida |
+| `810008` | descuento | Impuesto a las Ganancias |
+
+Para un concepto que la tabla no tiene (la suma no remunerativa del acuerdo
+UOCRA, por ejemplo), ARCA deja **rangos de uso libre**: `521000-529999` para
+beneficios sociales, `551000-559999` para importes no remunerativos especiales.
+Están en el CSV con `uso_libre = SI`.
+
+### Tres cosas que salieron de cruzar fuentes
+
+**1 · El Fondo de Cese Laboral NO pasa por el 931.** No hay código para él en
+toda la tabla. Lo más cercano es `520010` *Gratificación por cese laboral* y
+`520014` *Indemnización por despido*, que son pagos por **terminar** la
+relación, no el depósito mensual. Coincide con la Ley 22.250: el fondo va a una
+cuenta a nombre del trabajador (**art. 15**: 12 % el primer año, 8 % desde el
+año de antigüedad; **art. 16**: dentro de los primeros 15 días del mes
+siguiente) y se prueba con una constancia mensual escrita propia (**art. 29**).
+
+> ⚠ Es un costo real que nunca aparece en el 931. Quien reconcilie costo de
+> personal contra el 931 va a estar corto un 12 % u 8 % y va a creer que le
+> falta plata.
+
+**2 · El desarraigo es REMUNERATIVO según ARCA** (`160004`). Las guías de
+liquidación de UOCRA que circulan lo ponen como no remunerativo. **Manda esta
+tabla**, que es contra la que valida el 931.
+
+**3 · El premio asistencia es 20 %, no 18 %.** CAMARCO dice textual: *«el 90 %
+de los operarios cobra el premio por asistencia, en consecuencia dicho premio
+integra el salario en un 18 %»*. 20 × 0,90 = 18 exacto. El 18 % es un promedio
+actuarial; en el recibo se gana o no se gana. **Ésa es la diferencia de fondo
+entre la hora CAMARCO y la hora recibo.**
+
+### Y una que evita un doble cómputo
+
+La **contribución diferencial de la Ley 26.494** (2 % el 1º año, 3 % el 2º, 4 %
+el 3º, 5 % el 4º — o sea 5 % hoy) **ya está adentro del 39,32 %** de CAMARCO:
+figura en la legislación del item 10 (Contribuciones patronales – C.U.S.S.) del
+Trabajo 185. **No se suma aparte.**
+
+### Qué falta para la hora recibo
+
+Los porcentajes de los descuentos (11 / 3 / 3 / 2) vienen de fuentes
+secundarias que coinciden entre sí, pero **no de una fuente oficial**. Y falta
+lo que ninguna búsqueda reemplaza:
+
+- **un recibo real** de la empresa, y
+- **un F.931 o el TXT del Libro de Sueldos Digital**, que es texto plano de
+  campos fijos.
+
+Con esos dos el mapeo concepto → campo queda con los códigos que la empresa
+usa de verdad, y la hora recibo sale medida, no reconstruida. El contador ya
+los tiene: presenta el 931 todos los meses.
+
+---
+
+## 7 · Lo que estos archivos NO son
 
 - **No son una liquidación de sueldos.** Para eso hace falta el parte por
   trabajador y por obra (horas, faltas, días de lluvia), las retenciones reales
@@ -293,6 +373,7 @@ texto completo del acuerdo.
 | `camarco_acuerdos_salariales.csv` | acuerdos con fecha de publicación y de firma | 100 |
 | `uocra_jornales.csv` | básicos y no remunerativos por categoría (Zona A) | 73 |
 | `uocra_adicionales.csv` | aportes, contribuciones y seguro, con vigencia | 4 |
+| `arca_conceptos_sueldo_931.csv` | la tabla oficial de conceptos del F.931 | 112 |
 | `indec_op_conceptos.csv` | los 436 índices por insumo, con su código CPC | 436 |
 | `indec_op_valores.csv` | el valor de hoy de cada uno, por mes | 56.348 |
 | `indec_op_revisiones.csv` | cada valor tal como se leyó en cada bajada | 56.564 |

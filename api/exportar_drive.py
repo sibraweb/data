@@ -184,6 +184,19 @@ def exportar_uocra(destino: Path) -> None:
                "acuerdo_ref", "texto"], ad)
 
 
+def exportar_conceptos_931(destino: Path) -> None:
+    """La tabla oficial de conceptos del Libro de Sueldos Digital (el F.931).
+
+    Es la tabla contra la que valida ARCA, asi que armar un recibo se vuelve un
+    mapeo contra esto en vez de una reconstruccion a partir de blogs.
+    """
+    import arca_conceptos_sueldo
+    cs = arca_conceptos_sueldo.fetch_conceptos()
+    _escribir(destino, "arca_conceptos_sueldo_931.csv",
+              ["codigo", "codigo_hasta", "descripcion", "tipo", "uso_libre",
+               "relevante_construccion"], cs)
+
+
 # ── INDEC ───────────────────────────────────────────────────────────────────
 
 def exportar_indec(destino: Path) -> None:
@@ -215,6 +228,7 @@ def exportar_indec(destino: Path) -> None:
 
 TAREAS = {
     "cargas": exportar_cargas,
+    "conceptos931": exportar_conceptos_931,
     "cac": exportar_cac,
     "acuerdos": exportar_acuerdos,
     "uocra": exportar_uocra,
