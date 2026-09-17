@@ -539,16 +539,25 @@ function render() {
             <div class="campo"><label>Meses</label><input type="number" id="obra-meses" value="1" min="0" style="width:90px"></div>
             <div class="campo"><label>Días por mes</label><input type="number" id="obra-dias" value="5" min="0" style="width:90px"></div>
             <div class="campo"><label>Horas por día</label><input type="number" id="obra-horas" value="8" min="0" style="width:90px"></div>
-            <div class="campo"><label>Coef (jornal + K)</label><input type="number" id="obra-coef" value="2.15" step="0.01" style="width:90px"></div>
+            <div class="campo"><label>Coef (hora + K)</label><input type="number" id="obra-coef" value="2.15" step="0.01" style="width:90px"></div>
             <div class="campo"><label>K (ajuste $/m² adicional)</label><input type="number" id="obra-k" value="1" step="0.01" style="width:90px"></div>
             <div class="campo"><label>Superficie de obra (m²)</label><input type="number" id="obra-superficie" value="300" min="0" style="width:100px" readonly title="Calculada desde la tabla de Cálculo de Superficie, arriba"></div>
             <div class="campo"><label>&nbsp;</label><button type="button" id="obra-calcular">Calcular</button></div>
           </div>
           <div class="estado" id="estado-obra"></div>
+          <!-- ⚠ EL BASICO DE UOCRA SE PUBLICA POR HORA, NO POR JORNADA.
+               Juan, 2026-09-17: miro 6.348 contra los ~6.600 que tiene el, y la
+               columna decia «Jornal (básico)». El calculo siempre estuvo bien
+               —multiplica por las horas del dia— pero el rotulo invitaba a
+               compararlo contra un jornal diario, que es ocho veces otra cosa.
+               El unico Sereno es la excepcion: su valor es MENSUAL. -->
+          <p class="nota">Los básicos de UOCRA se publican <strong>por hora</strong>
+            (Zona A, CCT 76/75) — el total sale de multiplicarlos por las horas del
+            día. El <strong>Sereno</strong> es la excepción: su valor es mensual.</p>
           <div class="tabla-wrap">
             <table class="tabla-resumen">
               <thead><tr>
-                <th>Categoría</th><th>Cantidad</th><th>Jornal (básico)</th><th>Jornal + K</th>
+                <th>Categoría</th><th>Cantidad</th><th>Hora (básico)</th><th>Hora + K</th>
                 <th>Subtotal neto</th><th>Subtotal + K</th>
               </tr></thead>
               <tbody id="obra-tbody">${filasCategoria}</tbody>
