@@ -40,7 +40,9 @@ language sql stable security definer set search_path = public as $$
     ('icc_mo',         'ICC_BUENOS_AIRES', 'MANO_DE_OBRA'),
     ('icc_materiales', 'ICC_BUENOS_AIRES', 'MATERIALES'),
     ('uocra_oficial',  'UOCRA',            'OFICIAL'),
-    ('ipc',            'IPC_NIVEL',        '_')
+    ('ipc',            'IPC_NIVEL',        '_'),
+    ('ripte',          'RIPTE',            'RIPTE'),        -- desde 2018-03
+    ('dolar_blue',     'DOLAR',            'BLUE_VENTA')    -- diario: queda el ultimo del mes
   ),
   sv as (
     select distinct on (f.clave, date_trunc('month', v.fecha))
