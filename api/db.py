@@ -479,8 +479,75 @@ def upsert_valores_simple(serie: str, rows: list[dict], fecha_col: str = "FECHA"
             insertadas = cur.rowcount
         conn.commit()
     _cache_bust(f"simple:{serie}")
+    if serie == "INFLACION_INDEC":
+        recalcular_ipc_nivel()      # el acumulado no puede quedar atrás del %
     # ⚠ -1 es «psycopg no sabe», no «una fila»: se normaliza a 0
     return max(insertadas, 0)
+
+
+def recalcular_ipc_nivel() -> int:
+    """El IPC ACUMULADO, al lado de la variación mensual.
+
+    `INFLACION_INDEC` guarda el % de cada mes (1,7 · 2,1 · 1,9). Para deflactar
+    cualquier serie hace falta el NIVEL, y encadenarlo a mano en cada consulta
+    es pedir que alguien se olvide. Se guarda en su PROPIA serie:
+
+        INFLACION_INDEC  variación mensual en %      (la de siempre, intacta)
+        IPC_NIVEL        índice acumulado
+
+    ⚠ NO como otra columna de INFLACION_INDEC. Así estuvo un día (20-09-2026) y
+    rompió todo lo que lee las series simples sin filtrar columna —el lector
+    compartido `shared/sibra-indices-api.js` y `publico/generar.py`—: recibían
+    1,7 y 82.735 mezclados en la misma serie y los encadenaban como variaciones.
+
+    El nivel se ancla al último valor oficial del IPC que publicó INDEC y se
+    reconstruye hacia atrás, así coincide con el índice de verdad:
+
+        nivel[m-1] = nivel[m] / (1 + var[m]/100)
+
+    Se recalcula entero cada vez (son 300 filas): si el INDEC corrige un mes
+    viejo, la serie se acomoda sola. Idempotente.
+    """
+    with _conectar() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT fecha, valor FROM series_valores
+                   WHERE serie='INFLACION_INDEC' AND columna='_' AND valor IS NOT NULL
+                   ORDER BY fecha"""
+            )
+            var = [(r["fecha"], float(r["valor"])) for r in cur.fetchall()]
+            cur.execute(
+                """SELECT ultimo_valor, ultima_fecha FROM indices_resumen_publico
+                   WHERE clave LIKE %s ORDER BY fecha_publicacion DESC LIMIT 1""",
+                ("%ipc_nivel",),
+            )
+            ancla = cur.fetchone()
+            if not var or not ancla or ancla["ultimo_valor"] is None:
+                return 0
+            ancla_valor = float(ancla["ultimo_valor"])
+            ancla_fecha = ancla["ultima_fecha"]
+
+            i = next((k for k, (f, _) in enumerate(var)
+                      if f.year == ancla_fecha.year and f.month == ancla_fecha.month), None)
+            if i is None:
+                return 0
+
+            nivel = [None] * len(var)
+            nivel[i] = ancla_valor
+            for k in range(i - 1, -1, -1):
+                nivel[k] = nivel[k + 1] / (1 + var[k + 1][1] / 100.0)
+            for k in range(i + 1, len(var)):
+                nivel[k] = nivel[k - 1] * (1 + var[k][1] / 100.0)
+
+            cur.executemany(
+                """INSERT INTO series_valores (serie, columna, fecha, valor)
+                   VALUES ('IPC_NIVEL', '_', %s, %s)
+                   ON CONFLICT (serie, columna, fecha) DO UPDATE SET valor = excluded.valor""",
+                [(f, round(n, 6)) for (f, _), n in zip(var, nivel)],
+            )
+        conn.commit()
+    _cache_bust("simple:IPC_NIVEL")
+    return len(var)
 
 
 def upsert_resumen_publico(filas: list[dict]) -> int:
@@ -541,6 +608,8 @@ def upsert_valores_ancha(serie: str, fecha: str, valores: dict) -> int:
             insertadas = cur.rowcount
         conn.commit()
     _cache_bust(f"ancha:{serie}")
+    if serie == "UOCRA" and insertadas:
+        actualizar_mano_de_obra_presuapp()   # un básico nuevo pisa el catálogo
     # ⚠ -1 es «psycopg no sabe», no «una fila»: se normaliza a 0
     return max(insertadas, 0)
 
@@ -886,6 +955,8 @@ def upsert_valores_ancha_bulk(serie: str, registros: list[dict], headers: list[s
             insertadas = cur.rowcount
         conn.commit()
     _cache_bust(f"ancha:{serie}")
+    if serie == "UOCRA" and insertadas:
+        actualizar_mano_de_obra_presuapp()   # un básico nuevo pisa el catálogo
     # ⚠ -1 es «psycopg no sabe», no «una fila»: se normaliza a 0
     return max(insertadas, 0)
 
@@ -964,3 +1035,28 @@ def uso_supabase() -> dict:
     }
     _cache_set(key, out)
     return out
+
+
+def actualizar_mano_de_obra_presuapp(coef: float = 2.1350) -> list[dict]:
+    """Un básico nuevo de UOCRA pisa la mano de obra del catálogo público.
+
+    `hora CAMARCO = básico × 2,1350` (Incidencia de las Cargas Sociales,
+    Trabajo Técnico Nº 185, vigencia 1º/07/2026). La cuenta vive del lado de
+    la base, en `presuapp_actualizar_mano_de_obra`: acá sólo se la dispara,
+    para que nadie tenga que acordarse de correrla después de actualizar.
+
+    Sin esto el catálogo envejece en silencio — que es lo que venía pasando:
+    el oficial albañil estaba cargado en $20.000.000 la hora y ninguna
+    pantalla lo decía, sólo las tareas que salían a seis millones el m².
+    """
+    try:
+        with _conectar() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM presuapp_actualizar_mano_de_obra(%s::numeric, true)", (coef,))
+                filas = cur.fetchall()
+            conn.commit()
+        return [dict(f) for f in filas]
+    except Exception as e:
+        # que no se caiga la actualización de índices por esto
+        print(f"[presuapp] no se pudo actualizar la mano de obra: {e}")
+        return []
