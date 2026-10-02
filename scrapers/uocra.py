@@ -90,7 +90,17 @@ def _listar_pdfs_76_75() -> list[str]:
         # (resolución del Ministerio de Trabajo, sin la tabla de jornales) y
         # se incluyen "Acuerdo", "Tramo" y "Acta Complementaria" (todos pueden
         # traer la tabla actualizada).
-        if "76/75" in label_low and not label_low.startswith("homologaci"):
+        #
+        # ⚠ EL CONVENIO SE ESCRIBE COMO VIENE: «76/75», «76-75» o «76.75».
+        # Juan, 2026-10-01: «si ya está homologado, ¿por qué no se actualizó
+        # el job?». El acuerdo de sep-nov 2026 está rotulado «Acuerdo 76-75 y
+        # 577-10 Septiembre 2026», con guion: el filtro exigía la barra, lo
+        # salteó y el job terminó «ok» sin traer nada.
+        # Los de contribución empresaria no traen escala: se saltean para no
+        # gastar uno de los `max_pdfs` en un PDF sin jornales.
+        if (re.search(r"\b76\s*[/\-.]\s*75\b", label_low)
+                and not label_low.startswith("homologaci")
+                and "contribuci" not in label_low):
             urls.append(BASE + href)
     return urls
 

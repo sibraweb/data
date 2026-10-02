@@ -166,6 +166,7 @@ def frescura() -> list[dict]:
 # la misma tabla y no son indices de ajuste de obra.
 SERIES_CONTRATO = {
     "CAC": "CAMARCO - costo de la construccion",
+    "CAMARCO_VIAL": "CAMARCO - indicador vial (obra vial tipo)",
     "ICC_CABA": "ICC INDEC - CABA",
     "ICC_BUENOS_AIRES": "ICC INDEC - Buenos Aires",
     "ICC_CORDOBA": "ICC INDEC - Cordoba",
