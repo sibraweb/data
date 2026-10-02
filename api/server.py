@@ -53,7 +53,7 @@ from proyeccion import estimar_modelo, proyectar
 from rem_estimaciones import construir_curva_mensual, resumen_por_anio
 from resumen import resumen_serie
 from resumen import variacion as calcular_variacion
-from scrapers import (alquileres, apymeco, argentinadatos, bcra, bcra_rem, camarco, cauciones,
+from scrapers import (apymeco, argentinadatos, bcra, bcra_rem, camarco, cauciones,
                       dolares, icc, indec_obra_publica, investing, mav, ripte,
                       salarios, smvm, tim, uocra, yahoo)
 
@@ -91,7 +91,6 @@ SERIES = {
     "icc_buenos_aires": {"tab": "ICC_BUENOS_AIRES", "fecha_col": "FECHA", "valor_col": "GENERAL"},
     "icc_cordoba": {"tab": "ICC_CORDOBA", "fecha_col": "FECHA", "valor_col": "GENERAL"},
     "icc_santa_fe": {"tab": "ICC_SANTA_FE", "fecha_col": "FECHA", "valor_col": "GENERAL"},
-    "alquiler_caba": {"tab": "ALQUILER_CABA", "fecha_col": "FECHA", "valor_col": "PROMEDIO"},
 }
 
 # Series BCRA simples ("fecha"/"valor") que se vuelcan 1:1 a su propia hoja,
@@ -169,6 +168,11 @@ SERIES_MULTI_COLUMNA = {
                       "columnas": ["INDICE_GENERAL", "MATERIALES", "MANO_DE_OBRA", "PROVISIONES"]},
     "cac": {"tab": "CAC", "fecha_col": "FECHA",
             "columnas": ["COSTO_CONSTRUCCION", "MATERIALES", "MANO_DE_OBRA"]},
+    # Indicador Vial de CAMARCO (obra vial tipo, dic-01 = 100), sin y con
+    # gastos financieros. Juan, 2026-10-01: «en camarco súmame el índice vial».
+    # Se carga con api/cargar_camarco_vial.py (todavía sin scraper).
+    "camarco_vial": {"tab": "CAMARCO_VIAL", "fecha_col": "FECHA",
+                     "columnas": ["SIN_GF", "CON_GF"]},
     # "uocra:OFICIAL", "uocra:SERENO", etc. — para la calculadora de mano de
     # obra / redeterminación, que necesita el básico de CUALQUIER categoría
     # (no solo "Oficial", que es la única que vive en SERIES).
@@ -184,8 +188,6 @@ SERIES_MULTI_COLUMNA = {
                     "columnas": ["GENERAL", "MATERIALES", "MANO_DE_OBRA", "GASTOS"]},
     "icc_santa_fe": {"tab": "ICC_SANTA_FE", "fecha_col": "FECHA",
                      "columnas": ["GENERAL", "MATERIALES", "MANO_DE_OBRA", "GASTOS"]},
-    "alquiler_caba": {"tab": "ALQUILER_CABA", "fecha_col": "FECHA",
-                      "columnas": ["PROMEDIO", "PRECIO_2_AMBIENTES", "PRECIO_3_AMBIENTES"]},
     "caucion": {"tab": "CAUCION", "fecha_col": "FECHA",
                 "columnas": ["TASA_1D", "TASA_7D", "TASA_14D", "TASA_30D"]},
     # Cheques/echeqs y pagarés de MAV: TNA de la punta corta de la curva, por
@@ -236,10 +238,10 @@ RESUMEN_SERIES = [
     ("CAMARCO costo construcción", "cac:COSTO_CONSTRUCCION"),
     ("CAMARCO materiales", "cac:MATERIALES"),
     ("CAMARCO mano de obra", "cac:MANO_DE_OBRA"),
+    ("CAMARCO indicador vial", "camarco_vial:SIN_GF"),
     ("Construcción general (APYMECO)", "apymeco:INDICE_GENERAL"),
     ("Índice de Salarios INDEC", "salarios:INDICE_TOTAL"),
     ("ICC Buenos Aires (costo construcción)", "icc_buenos_aires:GENERAL"),
-    ("Alquiler CABA (promedio, fuente 2013-2019)", "alquiler_caba:PROMEDIO"),
     ("Riesgo país", "riesgo_pais"),
     ("MERVAL", "merval"),
     ("Caución 1 día", "caucion:TASA_1D"),
@@ -283,8 +285,8 @@ SERIES_SIMPLES_SUPABASE = {
 SERIES_ANCHAS_SUPABASE = {
     "DOLAR", "UOCRA", "APYMECO", "CAC", "SALARIOS",
     "ICC_CABA", "ICC_BUENOS_AIRES", "ICC_CORDOBA", "ICC_SANTA_FE",
-    "ALQUILER_CABA", "RIPTE", "CAUCION", "CHEQUES", "PAGARES",
-    "SMVM",
+    "RIPTE", "CAUCION", "CHEQUES", "PAGARES",
+    "SMVM", "CAMARCO_VIAL",
 }
 SERIES_EN_SUPABASE = SERIES_SIMPLES_SUPABASE | SERIES_ANCHAS_SUPABASE
 REM_EN_SUPABASE = True
@@ -1366,11 +1368,9 @@ def refrescar_indec_op():
           f"{confirmadas} pasaron a definitivo sin cambiar")
 
 
-def refrescar_alquileres():
-    serie = alquileres.fetch_alquileres()
-    headers = ["PRECIO_2_AMBIENTES", "PRECIO_3_AMBIENTES", "PROMEDIO"]
-    n = _guardar_ancha("ALQUILER_CABA", headers, serie)
-    print(f"[scheduler] ALQUILER_CABA +{n} filas (fuente discontinuada, no pasa de ago-2019)")
+# ALQUILER_CABA se BORRO el 2026-09-22 (Juan): la fuente murio en ago-2019.
+# Respaldo: H:/My Drive/web_sibra/indices/referencia/ALQUILER_CABA_2013-2019_respaldo.csv
+# Para alquileres esta el ICL.
 
 
 def refrescar_uocra():
@@ -1380,6 +1380,16 @@ def refrescar_uocra():
         "AYUDANTE_NO_REM", "SERENO_NO_REM",
     ]
     serie = uocra.fetch_uocra()
+    # ⚠ Un acuerdo trae los meses que vienen (el de sep-2026 trae hasta nov).
+    # No se cargan antes de que rijan: `presuapp_actualizar_mano_de_obra` toma
+    # el max(fecha) de UOCRA, y con noviembre adentro el catálogo cobraría la
+    # hora de noviembre en pleno octubre. El job los levanta solo el mes que
+    # empiezan a regir.
+    hoy = dt.date.today().isoformat()
+    futuros = [f["FECHA"] for f in serie if f.get("FECHA", "") > hoy]
+    serie = [f for f in serie if f.get("FECHA", "") <= hoy]
+    if futuros:
+        print(f"[scheduler] UOCRA: {', '.join(futuros)} todavía no rigen, se cargan ese mes")
     n = _guardar_ancha("UOCRA", headers, serie)
     print(f"[scheduler] UOCRA +{n} filas (algunos meses solo salen como PDF escaneado, sin OCR quedan para carga manual; "
           f"no remunerativo no siempre se puede leer por formato inconsistente del PDF fuente)")
@@ -1647,7 +1657,6 @@ FUENTES_MANUALES = {
     "salarios": refrescar_salarios,
     "icc": refrescar_icc,
     "indec_op": refrescar_indec_op,
-    "alquileres": refrescar_alquileres,
     "publicar_resumen": publicar_resumen,
     # ⚠ ULTIMA A PROPOSITO: escribe en Drive y sale a CAMARCO y ARCA, asi que
     # es la mas lenta y la que mas puede fallar. Si reventara, las otras ya
@@ -1662,7 +1671,43 @@ def refrescar_manual(fuente):
     if not fn:
         return jsonify({"error": f"fuente desconocida: {fuente} (usar: {', '.join(FUENTES_MANUALES)})"}), 404
     fn()
-    return jsonify({"status": "ok"})
+    # ⚠ "ok" NO quiere decir que haya entrado algo. Juan, 2026-09-25: *"no sé
+    # por qué no me actualiza"* — el job corría bien, la fuente no tenía nada
+    # nuevo (UOCRA publica algunos meses como PDF escaneado) y el panel decía
+    # "ok" igual. Así, no actualizar nunca se ve. Por eso se devuelve HASTA
+    # CUÁNDO llega la serie después de correr: el panel lo muestra y la falta
+    # de novedades deja de ser silenciosa.
+    return jsonify({"status": "ok", "fuente": fuente, **_hasta_cuando(fuente)})
+
+
+# Qué serie mirar para saber si una fuente trajo algo. Sólo las que son una
+# serie con fecha; el resto no tiene "última fecha" que mostrar.
+_SERIE_DE_FUENTE = {
+    "uocra": ("UOCRA", "OFICIAL"), "cac": ("CAC", "COSTO_CONSTRUCCION"),
+    "ripte": ("RIPTE", "RIPTE"), "icc": ("ICC_CABA", "GENERAL"),
+    "salarios": ("SALARIOS", "INDICE_TOTAL"), "apymeco": ("APYMECO", "INDICE_GENERAL"),
+    "dolar": ("DOLAR", "OFICIAL_VENTA"), "caucion": ("CAUCION", "TASA_1D"),
+    "mav": ("CHEQUES", "NO_GARANTIZADO_CORTO"), "riesgo_pais": ("RIESGO_PAIS", "_"),
+    "merval": ("MERVAL", "_"), "tim": ("TIM", "_"),
+}
+
+
+def _hasta_cuando(fuente):
+    """{'ultima_fecha': ..., 'dias_de_atraso': ...} de la serie de esa fuente."""
+    par = _SERIE_DE_FUENTE.get(fuente)
+    if not par:
+        return {}
+    try:
+        from datetime import date as _date
+        filas = db.leer_serie_ancha(par[0]) if par[1] != "_" else db.leer_serie_simple(par[0])
+        fechas = [str(f.get("FECHA", ""))[:10] for f in filas if f.get("FECHA")]
+        if not fechas:
+            return {"ultima_fecha": None}
+        ult = max(fechas)
+        return {"ultima_fecha": ult,
+                "dias_de_atraso": (_date.today() - _date.fromisoformat(ult)).days}
+    except Exception as exc:
+        return {"ultima_fecha": None, "detalle": str(exc)}
 
 
 # Estado de la sincronización inicial. El front lo consulta para refrescar solo

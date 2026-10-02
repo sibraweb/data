@@ -27,7 +27,6 @@ const SbIndices = (() => {
     salarios: ['SALARIOS', 'INDICE_TOTAL'],
     icc_caba: ['ICC_CABA', 'GENERAL'], icc_buenos_aires: ['ICC_BUENOS_AIRES', 'GENERAL'],
     icc_cordoba: ['ICC_CORDOBA', 'GENERAL'], icc_santa_fe: ['ICC_SANTA_FE', 'GENERAL'],
-    alquiler_caba: ['ALQUILER_CABA', 'PROMEDIO'],
   };
 
   const MULTI = {
@@ -39,7 +38,6 @@ const SbIndices = (() => {
     icc_buenos_aires: ['GENERAL', 'MATERIALES', 'MANO_DE_OBRA', 'GASTOS'],
     icc_cordoba: ['GENERAL', 'MATERIALES', 'MANO_DE_OBRA', 'GASTOS'],
     icc_santa_fe: ['GENERAL', 'MATERIALES', 'MANO_DE_OBRA', 'GASTOS'],
-    alquiler_caba: ['PROMEDIO', 'PRECIO_2_AMBIENTES', 'PRECIO_3_AMBIENTES'],
     caucion: ['TASA_1D', 'TASA_7D', 'TASA_14D', 'TASA_30D'],
     cheques: ['AVALADO_CORTO', 'GARANTIZADO_CORTO', 'NO_GARANTIZADO_CORTO'],
     pagares: ['AVALADO_CORTO', 'GARANTIZADO_CORTO', 'NO_GARANTIZADO_CORTO',
@@ -49,7 +47,7 @@ const SbIndices = (() => {
   const MULTI_TAB = {
     construccion: 'CONSTRUCCION', cac: 'CAC', uocra: 'UOCRA', salarios: 'SALARIOS',
     icc_caba: 'ICC_CABA', icc_buenos_aires: 'ICC_BUENOS_AIRES', icc_cordoba: 'ICC_CORDOBA',
-    icc_santa_fe: 'ICC_SANTA_FE', alquiler_caba: 'ALQUILER_CABA', caucion: 'CAUCION',
+    icc_santa_fe: 'ICC_SANTA_FE', caucion: 'CAUCION',
     cheques: 'CHEQUES', pagares: 'PAGARES',
   };
 
@@ -82,7 +80,6 @@ const SbIndices = (() => {
     ['Construcción general (APYMECO)', 'construccion:INDICE_GENERAL'],
     ['Índice de Salarios INDEC', 'salarios:INDICE_TOTAL'],
     ['ICC Buenos Aires (costo construcción)', 'icc_buenos_aires:GENERAL'],
-    ['Alquiler CABA (promedio, fuente 2013-2019)', 'alquiler_caba:PROMEDIO'],
     ['Riesgo país', 'riesgo_pais'], ['MERVAL', 'merval'],
     ['Caución 1 día', 'caucion:TASA_1D'], ['Caución 7 días', 'caucion:TASA_7D'],
     ['Caución 30 días', 'caucion:TASA_30D'],
