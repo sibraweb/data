@@ -1806,7 +1806,7 @@ def estaticos_shared(archivo):
 # que poder mostrar los jornales aunque nadie haya corrido todavia el export
 # del coeficiente, y decir cual falta.
 
-DIR_DRIVE = Path(r"H:\My Drive\web_sibra\indices")
+DIR_DRIVE = Path(os.path.join(os.environ.get("SIBRA_DRIVE", r"H:\My Drive"), r"web_sibra\indices"))
 
 CATEGORIAS_MO = [
     ("AYUDANTE", "Ayudante"),

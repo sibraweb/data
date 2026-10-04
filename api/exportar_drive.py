@@ -22,6 +22,7 @@ la base. Si alguna vez divergen, manda la base.
 termina con el mismo periodo tres veces y nadie sabe cual vale.
 """
 from __future__ import annotations
+import os
 
 import argparse
 import csv
@@ -44,7 +45,7 @@ load_dotenv(BASE.parent / ".env")
 
 import db  # noqa: E402
 
-DESTINO = Path(r"H:\My Drive\web_sibra\indices")
+DESTINO = Path(os.path.join(os.environ.get("SIBRA_DRIVE", r"H:\My Drive"), r"web_sibra\indices"))
 
 
 def _escribir(destino: Path, nombre: str, columnas: list[str],
