@@ -23,9 +23,9 @@ alícuota legal de IVA (21 %, 10,5 % o 27 %) al centavo; entonces la inclusión 
 la alícuota quedan verificadas y los importes se guardan divididos por
 (1 + alícuota). Si no cierra, el precio queda PENDIENTE y no se escribe.
 
-Corre solo, sin login ni navegador. No depende de Windows: rutas por variable
-de entorno (ver `README.md`). El cronograma vive en el panel 8400
-(`jobs_cronograma`, job `precios_easy`, cada 10 días).
+Corre solo, sin login ni navegador. Drive por `SIBRA_DRIVE` (o `EASY_DRIVE_DIR`).
+El cronograma vive en el panel 8400 (`jobs_cronograma`, job `precios_easy`,
+cada 10 días).
 
     python precios_easy.py            # corrida completa
     python precios_easy.py --seco     # releva y valida, no escribe en Drive
