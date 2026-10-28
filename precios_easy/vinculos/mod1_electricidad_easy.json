@@ -1,0 +1,23 @@
+{
+  "proveedor": "EASY", "id_proveedor": "251", "zona": "H3506",
+  "csv_insumos": "H:/My Drive/Precios Easy/Precios Easy - Insumos.csv",
+  "csv_precios": "H:/My Drive/Precios Easy/Precios Easy - Precios H3506.csv",
+  "origen": "EASY:precios_easy", "lugar": "Resistencia (CP 3506)",
+  "vinculos": [
+    {"cod_sibra": "P41DU001",  "id_producto": "EASY-1324905", "coef": "1/30",  "presentacion": "rollo 30 m"},
+    {"cod_sibra": "P41DU002",  "id_producto": "EASY-1324928", "coef": "1/30",  "presentacion": "rollo 30 m"},
+    {"cod_sibra": "P41DU003",  "id_producto": "EASY-1132365", "coef": "1/100", "presentacion": "rollo 100 m"},
+    {"cod_sibra": "P41DU004",  "id_producto": "EASY-1132371", "coef": "1/100", "presentacion": "rollo 100 m"},
+    {"cod_sibra": "P41NR002b", "id_producto": "EASY-1952036", "coef": "1",     "presentacion": "tira 3 m"},
+    {"cod_sibra": "P41NR003b", "id_producto": "EASY-1013827", "coef": "1",     "presentacion": "tira 3 m"},
+    {"cod_sibra": "P41NV202",  "id_producto": "EASY-1952059", "coef": "1",     "presentacion": "unidad"},
+    {"cod_sibra": "P41NJ011",  "id_producto": "EASY-1134418", "coef": "1",     "presentacion": "unidad"},
+    {"cod_sibra": "P41NJ018",  "id_producto": "EASY-1065244", "coef": "1/12",  "presentacion": "pack 12 un"},
+    {"cod_sibra": "P41NJ019",  "id_producto": "EASY-1190464", "coef": "1",     "presentacion": "unidad"},
+    {"cod_sibra": "P41NJ009",  "id_producto": "EASY-1265953", "coef": "1",     "presentacion": "unidad"},
+    {"cod_sibra": "P41PT216b", "id_producto": "EASY-1517473", "coef": "1",     "presentacion": "unidad"},
+    {"cod_sibra": "P41PT220b", "id_producto": "EASY-1517476", "coef": "1",     "presentacion": "unidad"},
+    {"cod_sibra": "P41PD240",  "id_producto": "EASY-1132409", "coef": "1",     "presentacion": "unidad"},
+    {"cod_sibra": "P41MC000",  "id_producto": "EASY-1022308", "coef": "1",     "presentacion": "unidad", "nota": "gabinete 4 polos; verificar medida"}
+  ]
+}

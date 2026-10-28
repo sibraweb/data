@@ -1,0 +1,19 @@
+{
+ "proveedor": "EASY",
+ "id_proveedor": "251",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Easy/Precios Easy - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Easy/Precios Easy - Precios H3506.csv",
+ "origen": "EASY:precios_easy",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {"cod_sibra": "P41JJ004b", "id_producto": "EASY-1758546", "coef": "1.3333", "presentacion": "unidad",
+   "nota": "Genrod · Jabalina Copperweld 5/8 x 1500 mm. Easy no tiene la de 2 m: se prorratea 2/1,5 (aproximado, verificar)"},
+  {"cod_sibra": "P05AT632", "id_producto": "EASY-1216122", "coef": "1", "presentacion": "unidad",
+   "nota": "Tubofusion · Buje reduccion 25x20 mm polipropileno (3/4 a 1/2 segun equivalencia de Juan)"},
+  {"cod_sibra": "P21WE060", "id_producto": "EASY-1206700", "coef": "0.27778", "presentacion": "rollo",
+   "nota": "Solyon · Mosquitero metalizado gris 1,2 x 3 m = 3,6 m2 por rollo (coef 1/3,6)"},
+  {"cod_sibra": "P33AW004", "id_producto": "EASY-455112", "coef": "1", "presentacion": "unidad",
+   "nota": "SC Metalurgica · Mensula 25x30 cm acero blanco (medida a verificar contra la de la receta)"}
+ ]
+}

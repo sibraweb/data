@@ -1,0 +1,67 @@
+{
+ "proveedor": "EASY",
+ "id_proveedor": "251",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Easy/Precios Easy - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Easy/Precios Easy - Precios H3506.csv",
+ "origen": "EASY:precios_easy",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {
+   "cod_sibra": "P03CE005b",
+   "id_producto": "EASY-1306950",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Cemento Portland 25 kg Loma Negra"
+  },
+  {
+   "cod_sibra": "P03MM005b",
+   "id_producto": "EASY-1353270",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Ladrillo comun"
+  },
+  {
+   "cod_sibra": "P03FA020",
+   "id_producto": "EASY-1046414",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Acero ADN 10 mm x 12 m Bragado"
+  },
+  {
+   "cod_sibra": "P03CA010b",
+   "id_producto": "EASY-1474970",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Cal hidraulica 25 kg Loma Negra"
+  },
+  {
+   "cod_sibra": "P03AD015b",
+   "id_producto": "EASY-1024746",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Hidrofugo en pasta 20 kg Weber"
+  },
+  {
+   "cod_sibra": "P21WE000",
+   "id_producto": "EASY-1213167",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Electrodo 2.50 mm 1 kg Acindar"
+  },
+  {
+   "cod_sibra": "P25AF010",
+   "id_producto": "EASY-1696271",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Alambre recocido N16 x 1 kg Nagel"
+  },
+  {
+   "cod_sibra": "P37WA005",
+   "id_producto": "EASY-1163689",
+   "coef": "0.375",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Tirante pino cepillado 2x2x2.44 m: 2.67 pie2 por pieza (coef 0.375; cepillado, aproximado)"
+  }
+ ]
+}

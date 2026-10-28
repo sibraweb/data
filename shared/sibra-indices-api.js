@@ -20,7 +20,9 @@ const SbIndices = (() => {
     inflacion_indec: ['INFLACION_INDEC', 'VALOR'],
     badlar: ['BADLAR', 'VALOR'], tamar: ['TAMAR', 'VALOR'], baibar: ['BAIBAR', 'VALOR'],
     depositos_30d: ['DEPOSITOS_30D', 'VALOR'], adelantos_cta_cte: ['ADELANTOS_CTA_CTE', 'VALOR'],
-    prestamos_personales: ['PRESTAMOS_PERSONALES', 'VALOR'], tim: ['TIM', 'VALOR'],
+    prestamos_personales: ['PRESTAMOS_PERSONALES', 'VALOR'],
+    cert_bna_tna_grandes: ['CERT_BNA_TNA_GRANDES', 'VALOR'], cert_bna_tna_mipyme: ['CERT_BNA_TNA_MIPYME', 'VALOR'],
+    tim: ['TIM', 'VALOR'],
     riesgo_pais: ['RIESGO_PAIS', 'VALOR'], merval: ['MERVAL', 'VALOR'],
     ripte: ['RIPTE', 'RIPTE'], uocra: ['UOCRA', 'OFICIAL'],
     construccion: ['CONSTRUCCION', 'INDICE_GENERAL'], cac: ['CAC', 'COSTO_CONSTRUCCION'],
@@ -39,6 +41,8 @@ const SbIndices = (() => {
     icc_cordoba: ['GENERAL', 'MATERIALES', 'MANO_DE_OBRA', 'GASTOS'],
     icc_santa_fe: ['GENERAL', 'MATERIALES', 'MANO_DE_OBRA', 'GASTOS'],
     caucion: ['TASA_1D', 'TASA_7D', 'TASA_14D', 'TASA_30D'],
+    bna_tasas: ['DESCUBIERTO_NO_SOLICITADO', 'DESCUBIERTO_SOLICITADO', 'DESCUBIERTO_HIPOTECARIA',
+                'ADELANTOS_ACUERDO', 'CARTERA_GENERAL', 'PF30_SUCURSAL', 'PF30_ELECTRONICO', 'PF30_EMPRESAS'],
     cheques: ['AVALADO_CORTO', 'GARANTIZADO_CORTO', 'NO_GARANTIZADO_CORTO'],
     pagares: ['AVALADO_CORTO', 'GARANTIZADO_CORTO', 'NO_GARANTIZADO_CORTO',
               'AVALADO_CORTO_USD', 'GARANTIZADO_CORTO_USD', 'NO_GARANTIZADO_CORTO_USD',
@@ -47,7 +51,7 @@ const SbIndices = (() => {
   const MULTI_TAB = {
     construccion: 'CONSTRUCCION', cac: 'CAC', uocra: 'UOCRA', salarios: 'SALARIOS',
     icc_caba: 'ICC_CABA', icc_buenos_aires: 'ICC_BUENOS_AIRES', icc_cordoba: 'ICC_CORDOBA',
-    icc_santa_fe: 'ICC_SANTA_FE', caucion: 'CAUCION',
+    icc_santa_fe: 'ICC_SANTA_FE', caucion: 'CAUCION', bna_tasas: 'BNA_TASAS',
     cheques: 'CHEQUES', pagares: 'PAGARES',
   };
 
@@ -69,7 +73,8 @@ const SbIndices = (() => {
   // Tabs de una sola columna en series_valores (columna = '_'), server.py:224
   const SIMPLES = new Set(['CER', 'UVA', 'UVI', 'ICL', 'INFLACION_INDEC', 'BADLAR', 'TAMAR',
     'BAIBAR', 'DEPOSITOS_30D', 'ADELANTOS_CTA_CTE', 'PRESTAMOS_PERSONALES', 'TIM',
-    'RIESGO_PAIS', 'MERVAL']);
+    'RIESGO_PAIS', 'MERVAL', 'CERT_BNA_TNA_GRANDES', 'CERT_BNA_TNA_MIPYME',
+    'USO_JUSTICIA', 'TM20', 'ADELANTOS_GRANDES']);
 
   const RESUMEN_SERIES = [
     ['UOCRA Oficial', 'uocra'], ['RIPTE', 'ripte'], ['Dólar oficial', 'dolar:dolar_oficial'],
@@ -83,6 +88,9 @@ const SbIndices = (() => {
     ['Riesgo país', 'riesgo_pais'], ['MERVAL', 'merval'],
     ['Caución 1 día', 'caucion:TASA_1D'], ['Caución 7 días', 'caucion:TASA_7D'],
     ['Caución 30 días', 'caucion:TASA_30D'],
+    ['BNA descubierto con acuerdo (TNA)', 'bna_tasas:ADELANTOS_ACUERDO'],
+    ['Descuento de certificados · Grandes (TNA)', 'cert_bna_tna_grandes'],
+    ['Descuento de certificados · MiPyME (TNA)', 'cert_bna_tna_mipyme'],
   ];
 
   const SEGMENTOS_CARD = [['AVALADO', 'Avalado'], ['GARANTIZADO', 'Garantizado'],

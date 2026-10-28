@@ -325,6 +325,8 @@ const FINANCIAMIENTO_SERIES = [
   { value: 'pagares_dl',   label: 'Pagarés — dólar linked' },
   { value: 'bcra_colocar', label: 'BCRA — lo que se paga por colocar' },
   { value: 'bcra_pedir',   label: 'BCRA — lo que cuesta pedir' },
+  { value: 'bna_tasas',    label: 'Banco Nación — descubierto y adelantos' },
+  { value: 'certificados', label: 'Descuento de certificados (BNA / CAMARCO)' },
 ];
 
 // Las tasas del BCRA son series simples (una columna VALOR por serie), así que
@@ -337,10 +339,14 @@ const BCRA_GRUPOS = {
   // Se usa como el CER — dividir el coeficiente de una fecha por el de otra.
   bcra_pedir:   [['adelantos_cta_cte', 'Adelantos en cta. cte.'],
                  ['prestamos_personales', 'Préstamos personales']],
+  // Índice T.E.M. diario de CAMARCO (a 5 hábiles), TNA publicada. Series simples.
+  certificados: [['cert_bna_tna_grandes', 'Grandes inversores'], ['cert_bna_tna_mipyme', 'MiPyME']],
 };
 
 // familia -> columnas a graficar y cómo llamarlas
 const FINANCIAMIENTO_COLS = {
+  // ⚠ El BNA solo publica lo vigente hoy: la serie nace el día que empezó el relevamiento.
+  bna_tasas:   ['bna_tasas', [['DESCUBIERTO_NO_SOLICITADO', 'Descubierto no solicitado'], ['DESCUBIERTO_SOLICITADO', 'Descubierto solicitado'], ['DESCUBIERTO_HIPOTECARIA', 'Descubierto c/ garantía hipotecaria'], ['ADELANTOS_ACUERDO', 'Adelanto con acuerdo'], ['CARTERA_GENERAL', 'Cartera general']]],
   caucion:     ['caucion',  [['TASA_1D', '1 día'], ['TASA_7D', '7 días'], ['TASA_14D', '14 días'], ['TASA_30D', '30 días']]],
   cheques:     ['cheques',  [['AVALADO_CORTO', 'Avalado'], ['GARANTIZADO_CORTO', 'Garantizado'], ['NO_GARANTIZADO_CORTO', 'No garantizado']]],
   pagares:     ['pagares',  [['AVALADO_CORTO', 'Avalado'], ['GARANTIZADO_CORTO', 'Garantizado'], ['NO_GARANTIZADO_CORTO', 'No garantizado']]],

@@ -1,0 +1,18 @@
+{
+ "proveedor": "bercomat",
+ "id_proveedor": "96",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Bercomat/Precios Bercomat - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Bercomat/Precios Bercomat - Precios.csv",
+ "origen": "BERCOMAT:precios_bercomat",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {
+   "cod_sibra": "P31CE002",
+   "id_producto": "BERCOMAT-680168001",
+   "coef": "1",
+   "presentacion": "caja 2,68 m2 (precio por m2)",
+   "nota": "Alberdi · Cerámico Azara Marrón 36x36 (elegido por Juan 12/10)"
+  }
+ ]
+}

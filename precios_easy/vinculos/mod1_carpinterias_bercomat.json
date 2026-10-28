@@ -1,0 +1,53 @@
+{
+ "proveedor": "bercomat",
+ "id_proveedor": "96",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Bercomat/Precios Bercomat - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Bercomat/Precios Bercomat - Precios.csv",
+ "origen": "BERCOMAT:precios_bercomat",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {
+   "cod_sibra": "IN455",
+   "id_producto": "BERCOMAT-505678001",
+   "coef": "1",
+   "presentacion": "puerta con marco 90x205",
+   "nota": "NXO · Puerta Deluxe Style 1T acero galvanizado (P1 entrada; elegida por Juan 12/10)"
+  },
+  {
+   "cod_sibra": "P09CP115",
+   "id_producto": "BERCOMAT-503899001",
+   "coef": "1",
+   "presentacion": "puerta con marco 88x205",
+   "nota": "NXO · Puerta Semipremium Inyectada 2 tableros (P2 cocina; elegida por Juan 12/10)"
+  },
+  {
+   "cod_sibra": "IN465",
+   "id_producto": "BERCOMAT-609579001",
+   "coef": "1",
+   "presentacion": "puerta placa 80x7",
+   "nota": "HERF · Puerta placa pino 80x7 (P3 interiores)"
+  },
+  {
+   "cod_sibra": "IN664",
+   "id_producto": "BERCOMAT-503947001",
+   "coef": "1",
+   "presentacion": "ventana 100x100",
+   "nota": "NXO · Ventana abatible acero con celosías y reja 100x100 E5353 (V1)"
+  },
+  {
+   "cod_sibra": "P09AV110",
+   "id_producto": "BERCOMAT-515306001",
+   "coef": "1",
+   "presentacion": "ventana 80x40",
+   "nota": "NXO · Ventana corrediza aluminio con reja 80x40 B1112 (V3 ventiluz cocina)"
+  },
+  {
+   "cod_sibra": "P09AV115",
+   "id_producto": "BERCOMAT-515305001",
+   "coef": "1",
+   "presentacion": "ventana 60x40",
+   "nota": "NXO · Ventana corrediza aluminio con reja 60x40 B1111 (V4 ventiluz baño)"
+  }
+ ]
+}

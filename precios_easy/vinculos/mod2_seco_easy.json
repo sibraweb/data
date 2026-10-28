@@ -1,0 +1,16 @@
+{
+ "proveedor": "EASY",
+ "id_proveedor": "251",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Easy/Precios Easy - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Easy/Precios Easy - Precios H3506.csv",
+ "origen": "EASY:precios_easy",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {"cod_sibra": "P47LW114b", "id_producto": "EASY-1329784", "coef": "3.857", "presentacion": "balde 7 kg",
+   "nota": "Anclaflex · Masilla para placas de yeso 7 kg: el balde de 27 kg del insumo = 27/7 de ese envase (Bercomat no tiene masilla lista)"},
+  {"cod_sibra": "P47LR100b", "id_producto": "EASY-1547483", "coef": "1", "presentacion": "placa 1,20 x 2,40", "nota": "Maxhaus · Placa de yeso 9,5 mm 1,20 x 2,40 (sin stock en H3506)"},
+  {"cod_sibra": "P5OZ02", "id_producto": "EASY-1893232", "coef": "0.1", "presentacion": "pack x10", "nota": "Tel · Remache 3,5 x 10 mm, pack de 10 (el insumo es por unidad)"},
+  {"cod_sibra": "P03MR007", "id_producto": "EASY-1122074", "coef": "0.05", "presentacion": "pack x20", "nota": "Fara · Ladrillo refractario 22 x 6 x 2,2 cm, pack de 20 (el insumo es por unidad)"}
+ ]
+}

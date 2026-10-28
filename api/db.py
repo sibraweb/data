@@ -110,7 +110,7 @@ def frescura() -> list[dict]:
         "CHEQUES": "diaria", "PAGARES": "diaria", "USO_JUSTICIA": "diaria",
         "DEPOSITOS_30D": "diaria", "ADELANTOS_CTA_CTE": "diaria",
         "ADELANTOS_GRANDES": "diaria", "PRESTAMOS_PERSONALES": "diaria",
-        "CERT_BNA_TNA_GRANDES": "diaria", "CERT_BNA_TNA_MIPYME": "diaria",
+        "BNA_TASAS": "diaria", "CERT_BNA_TNA_GRANDES": "diaria", "CERT_BNA_TNA_MIPYME": "diaria",
         "CERT_BNA_IND_GRANDES": "diaria", "CERT_BNA_IND_MIPYME": "diaria",
     }
     cx = _conectar()

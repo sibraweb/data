@@ -1,0 +1,18 @@
+{
+ "proveedor": "bercomat",
+ "id_proveedor": "96",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Bercomat/Precios Bercomat - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Bercomat/Precios Bercomat - Precios.csv",
+ "origen": "BERCOMAT:precios_bercomat",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {
+   "cod_sibra": "P33MC001",
+   "id_producto": "BERCOMAT-681166001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Ricchezze · Bajo Mesada Turin 140 3 puertas 1 cajon blanco"
+  }
+ ]
+}

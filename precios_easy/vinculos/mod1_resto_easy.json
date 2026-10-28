@@ -1,0 +1,179 @@
+{
+ "proveedor": "EASY",
+ "id_proveedor": "251",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Easy/Precios Easy - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Easy/Precios Easy - Precios H3506.csv",
+ "origen": "EASY:precios_easy",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {
+   "cod_sibra": "P05AT014",
+   "id_producto": "EASY-1216153",
+   "coef": "1/4",
+   "presentacion": "caño 4 m",
+   "nota": "Tubofusión · Caño Termofusión 40 mm (se asume tira de 4 m)"
+  },
+  {
+   "cod_sibra": "P05AT142",
+   "id_producto": "EASY-1216167",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Tubofusión · Codo 90° termofusión 25 x 3/4 (inserto rosca hembra)"
+  },
+  {
+   "cod_sibra": "P05AT143",
+   "id_producto": "EASY-1216168",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Tubofusión · Codo 90° termofusión 32 x 1 (inserto rosca hembra)"
+  },
+  {
+   "cod_sibra": "P05AT214",
+   "id_producto": "EASY-1325350",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Acqua System · Te normal 40 mm"
+  },
+  {
+   "cod_sibra": "P05AT221",
+   "id_producto": "EASY-1216180",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Tubofusión · Te termofusión 20 x 1/2 (inserto rosca)"
+  },
+  {
+   "cod_sibra": "P05AT241",
+   "id_producto": "EASY-1999550",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Sigas · Te reducción termofusión 40x25"
+  },
+  {
+   "cod_sibra": "P05AT414",
+   "id_producto": "EASY-1216191",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Tubofusión · Unión doble 32 mm (no hay de 40: aproximado)"
+  },
+  {
+   "cod_sibra": "P05AT501",
+   "id_producto": "EASY-1216149",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Tubofusión · Llave de paso termofusión 20 mm"
+  },
+  {
+   "cod_sibra": "P05AT503",
+   "id_producto": "EASY-1445885",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Acqua System · Válvula esférica 32 mm (no hay llave de paso de 1\")"
+  },
+  {
+   "cod_sibra": "P05AT504",
+   "id_producto": "EASY-1216151",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Tubofusión · Válvula esférica 20 mm"
+  },
+  {
+   "cod_sibra": "P05AT505",
+   "id_producto": "EASY-1216152",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Tubofusión · Válvula esférica con manija 25 mm"
+  },
+  {
+   "cod_sibra": "P05AT634",
+   "id_producto": "EASY-1216126",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Tubofusión · Buje reducción 40x32"
+  },
+  {
+   "cod_sibra": "P05GE020",
+   "id_producto": "EASY-1408846",
+   "coef": "1/3.2",
+   "presentacion": "caño 3,20 m",
+   "nota": "Revestubo · Caño epoxi roscado 3/4"
+  },
+  {
+   "cod_sibra": "P05GE120",
+   "id_producto": "EASY-1322990",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Dema · Codo 90° epoxi 3/4"
+  },
+  {
+   "cod_sibra": "P05GE520",
+   "id_producto": "EASY-1322993",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Dema · Tee epoxi 3/4"
+  },
+  {
+   "cod_sibra": "P05GV110",
+   "id_producto": "EASY-1053085",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Valforte · Llave esférica para gas con campana 3/4"
+  },
+  {
+   "cod_sibra": "P05GW001",
+   "id_producto": "EASY-1016508",
+   "coef": "2",
+   "presentacion": "25 cc",
+   "nota": "Parsecs · Sellador epoxi gas 25 cc (el insumo es de 50 cm3)"
+  },
+  {
+   "cod_sibra": "P05DW031",
+   "id_producto": "EASY-1177049",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "El Fontanero · Grampa omega 4\" (abrazadera de 110)"
+  },
+  {
+   "cod_sibra": "P05DC725",
+   "id_producto": "EASY-1476254",
+   "coef": "1",
+   "presentacion": "400 cc",
+   "nota": "Tubohogar · Solución lubricante silicona 400 cc"
+  },
+  {
+   "cod_sibra": "P21HG101",
+   "id_producto": "EASY-1446275",
+   "coef": "1/5.5",
+   "presentacion": "chapa 1,10 x 5 m",
+   "nota": "Serin · Chapa acanalada C25 (5,5 m2 por chapa)"
+  },
+  {
+   "cod_sibra": "P03CE015",
+   "id_producto": "EASY-1121978",
+   "coef": "1",
+   "presentacion": "1 kg",
+   "nota": "Maxhaus · Cemento blanco 1 kg"
+  },
+  {
+   "cod_sibra": "P25TF301",
+   "id_producto": "EASY-1358672",
+   "coef": "1/200",
+   "presentacion": "caja 200 un",
+   "nota": "Fischer · Tarugo con tornillo hormigón 8 mm x 200 (incluye el tarugo)"
+  },
+  {
+   "cod_sibra": "P53VV101",
+   "id_producto": "EASY-1029359",
+   "coef": "2",
+   "presentacion": "500 g",
+   "nota": "Indalo · Masilla para sanitarios y vidrios 500 g"
+  },
+  {
+   "cod_sibra": "P31CE002c",
+   "id_producto": "EASY-1169488",
+   "coef": "1/2.3",
+   "presentacion": "caja 2,3 m2",
+   "nota": "Cañuelas · Revestimiento cerámico 32x47 blanco brillante (2,3 m2 por caja)"
+  }
+ ]
+}

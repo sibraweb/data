@@ -1,0 +1,25 @@
+{
+ "proveedor": "bercomat",
+ "id_proveedor": "96",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Bercomat/Precios Bercomat - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Bercomat/Precios Bercomat - Precios.csv",
+ "origen": "BERCOMAT:precios_bercomat",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {
+   "cod_sibra": "P31OP020",
+   "id_producto": "BERCOMAT-680143001",
+   "coef": "1",
+   "presentacion": "caja 1,8 m2 (precio por m2)",
+   "nota": "San Lorenzo · Porcelanato Ice Tile blanco satinado 60x60 rectificado · piso interior y revestimiento (elegido 13/10)"
+  },
+  {
+   "cod_sibra": "P31OP022",
+   "id_producto": "BERCOMAT-681414001",
+   "coef": "1",
+   "presentacion": "caja 2,87 m2 (precio por m2)",
+   "nota": "Cerro Negro · Porcelanato Piedra Bali 64x64 antideslizante rectificado · mojados y galería (elegido 13/10)"
+  }
+ ]
+}

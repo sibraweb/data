@@ -1,0 +1,18 @@
+{
+ "proveedor": "bercomat",
+ "id_proveedor": "96",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Bercomat/Precios Bercomat - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Bercomat/Precios Bercomat - Precios.csv",
+ "origen": "BERCOMAT:precios_bercomat",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {
+   "cod_sibra": "P03MN004",
+   "id_producto": "BERCOMAT-513824001",
+   "coef": "1.5",
+   "presentacion": "unidad",
+   "nota": "Retak 10x25x50 x 1,5 = bloque de 15 cm (decidido por Juan 13/10: provisorio hasta que Cerámica Norte cotice el de 15)"
+  }
+ ]
+}

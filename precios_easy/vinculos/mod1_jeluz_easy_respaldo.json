@@ -1,0 +1,46 @@
+{
+ "proveedor": "EASY",
+ "id_proveedor": "251",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Easy/Precios Easy - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Easy/Precios Easy - Precios H3506.csv",
+ "origen": "EASY:precios_easy",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {
+   "cod_sibra": "P41IJ0008",
+   "id_producto": "EASY-1030713",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Jeluz Platinum · Tapón ciego blanco (respaldo de Brunel)"
+  },
+  {
+   "cod_sibra": "P41IJ0003",
+   "id_producto": "EASY-1030732",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Jeluz Platinum · Tapa módulo blanco (respaldo de Brunel)"
+  },
+  {
+   "cod_sibra": "P41IJ0009",
+   "id_producto": "EASY-1166230",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Jeluz Platinum · Interruptor tecla blanco 10 A (respaldo de Brunel)"
+  },
+  {
+   "cod_sibra": "P41IJ0011",
+   "id_producto": "EASY-1030718",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Jeluz Platinum · Pulsador 10 A (respaldo de Brunel; solo hay negro)"
+  },
+  {
+   "cod_sibra": "P41IJ0006",
+   "id_producto": "EASY-1234801",
+   "coef": "1/2",
+   "presentacion": "módulo doble",
+   "nota": "Jeluz Platinum · Módulo toma doble 10 A blanco = 2 tomas (respaldo de Brunel)"
+  }
+ ]
+}

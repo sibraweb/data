@@ -1,0 +1,18 @@
+{
+ "proveedor": "EASY",
+ "id_proveedor": "251",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Easy/Precios Easy - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Easy/Precios Easy - Precios H3506.csv",
+ "origen": "EASY:precios_easy",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {
+   "cod_sibra": "P51ES105",
+   "id_producto": "EASY-1338853",
+   "coef": "1/4",
+   "presentacion": "lata 4 L",
+   "nota": "Sinteplast · Esmalte Sintético Blanco Satinado 3 en 1 Antióxido (Juan 12/10)"
+  }
+ ]
+}

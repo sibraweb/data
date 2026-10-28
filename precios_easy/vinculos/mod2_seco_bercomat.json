@@ -1,0 +1,20 @@
+{
+ "proveedor": "bercomat",
+ "id_proveedor": "96",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Bercomat/Precios Bercomat - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Bercomat/Precios Bercomat - Precios.csv",
+ "origen": "BERCOMAT:precios_bercomat",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {"cod_sibra": "P47LW302b", "id_producto": "BERCOMAT-512207001", "coef": "1", "presentacion": "rollo 150 m",
+   "nota": "COVSA · Cinta microperforada de papel 150 m (CPN150) para placas de yeso"},
+  {"cod_sibra": "P47LW109b", "id_producto": "BERCOMAT-632242001", "coef": "0.78125", "presentacion": "bolsa 32 kg",
+   "nota": "Andina · Masilla para placa de yeso en polvo, bolsa de 32 kg: la bolsa de 25 kg del insumo = 25/32 de esa bolsa"},
+  {"cod_sibra": "P4LE040b", "id_producto": "BERCOMAT-500865001", "coef": "1", "presentacion": "unidad",
+   "nota": "Montante galvanizado 34 x 2,60 m (sin stock en H3506 al 13/10)"},
+  {"cod_sibra": "P4LE030b", "id_producto": "BERCOMAT-500881001", "coef": "1", "presentacion": "unidad", "nota": "Solera 35 galvanizado x 2,60 m"},
+  {"cod_sibra": "P4LE010b", "id_producto": "BERCOMAT-500882001", "coef": "1", "presentacion": "unidad", "nota": "Solera 70 galvanizado x 2,60 m"},
+  {"cod_sibra": "P4LE050", "id_producto": "BERCOMAT-500845001", "coef": "1", "presentacion": "unidad", "nota": "Buña perimetral galvanizada 2,60 m"}
+ ]
+}

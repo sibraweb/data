@@ -1,0 +1,102 @@
+{
+ "proveedor": "bercomat",
+ "id_proveedor": "96",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Bercomat/Precios Bercomat - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Bercomat/Precios Bercomat - Precios.csv",
+ "origen": "BERCOMAT:precios_bercomat",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {
+   "cod_sibra": "P03CE005b",
+   "id_producto": "BERCOMAT-681207001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Cemento Portland x 25 kg"
+  },
+  {
+   "cod_sibra": "P03MH015",
+   "id_producto": "BERCOMAT-505911001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Ladrillo hueco 18x18x25 c/9 agujeros (precio de lista, sin stock)"
+  },
+  {
+   "cod_sibra": "P03MH005",
+   "id_producto": "BERCOMAT-505910001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Ladrillo hueco 8x18x25 c/6 agujeros"
+  },
+  {
+   "cod_sibra": "P03CA010b",
+   "id_producto": "BERCOMAT-500776001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Cal hidratada El Milagro 25 kg (no es la hidraulica Santa Helena: aproximado)"
+  },
+  {
+   "cod_sibra": "P03CA010bb",
+   "id_producto": "BERCOMAT-500776001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Cal hidratada El Milagro 25 kg"
+  },
+  {
+   "cod_sibra": "P03AD015b",
+   "id_producto": "BERCOMAT-500815001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Ceresita hidrofugo 20 kg"
+  },
+  {
+   "cod_sibra": "P03CD005b",
+   "id_producto": "BERCOMAT-676558001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Weber adhesivo estandar ceramico 25 kg (verificar presentacion del insumo)"
+  },
+  {
+   "cod_sibra": "P21PC005b",
+   "id_producto": "BERCOMAT-500102001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Perfil C galvanizado 100x50x15x1.6 x 12 m (sin stock)"
+  },
+  {
+   "cod_sibra": "P21HG016",
+   "id_producto": "BERCOMAT-500394001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Chapa lisa galvanizada N27 1.22x2.44"
+  },
+  {
+   "cod_sibra": "P21WE000",
+   "id_producto": "BERCOMAT-509192001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Conarco electrodo 13 a 2.50 mm, por kg"
+  },
+  {
+   "cod_sibra": "P25TP020",
+   "id_producto": "BERCOMAT-679891001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Tornillo hex T1 punta mecha c/arandela 14x2 1/2"
+  },
+  {
+   "cod_sibra": "P25AF010",
+   "id_producto": "BERCOMAT-500003001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Alambre negro recocido N16 por kg (sin stock)"
+  },
+  {
+   "cod_sibra": "P25CF010",
+   "id_producto": "BERCOMAT-504118001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Respaldo de Ceramica Norte (MOD 1): Clavo punta Paris 2 x 1 kg"
+  }
+ ]
+}

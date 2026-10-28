@@ -65,10 +65,24 @@ TOPE_BUSQUEDA = 2500       # la búsqueda no pagina más allá de 50 páginas
 ALICUOTAS = (Decimal("0.21"), Decimal("0.105"), Decimal("0.27"))
 
 ALCANCE = [  # (rubro pedido, ruta de la categoría en Easy)
-    ("Sanitarios", "/banos-y-cocinas/sanitarios"),
+    # 2026-10-12: Juan pidió TODO el catálogo de Easy (antes: sólo 4 rubros). Son las 17 categorías de primer nivel.
+    ("Baños y Cocinas", "/banos-y-cocinas"),
+    ("Electrodomésticos", "/electrodomesticos"),
+    ("Muebles", "/muebles"),
+    ("Organización y Limpieza", "/organizacion-y-limpieza"),
+    ("Textil, Bazar y Deco", "/textil-bazar-y-deco"),
+    ("Iluminación", "/iluminacion"),
+    ("Jardín y Aire Libre", "/jardin-y-aire-libre"),
+    ("Automotor", "/automotor"),
+    ("Pisos y revestimientos", "/pisos-y-revestimientos"),
+    ("Pinturas", "/pinturas"),
+    ("Aberturas", "/aberturas"),
+    ("Construcción y Maderas", "/construccion-y-maderas"),
     ("Plomería", "/plomeria"),
     ("Electricidad", "/electricidad"),
-    ("Pisos y revestimientos", "/pisos-y-revestimientos"),
+    ("Herramientas", "/herramientas"),
+    ("Ferretería", "/ferreteria"),
+    ("Soluciones Modulares", "/soluciones-modulares"),
 ]
 # Especificaciones internas de Easy: no son clasificaciones del producto.
 # `price_wo_taxes` además es un importe que todavía no se validó.
@@ -336,7 +350,7 @@ class Corrida:
 
         def camino(nodos, pref):
             for n in nodos:
-                ruta = n["url"].replace(BASE, "")
+                ruta = urllib.parse.urlparse(n["url"]).path
                 yield n, pref + [n["name"]], ruta
                 yield from camino(n.get("children", []), pref + [n["name"]])
         todos = list(camino(t, []))
@@ -348,7 +362,7 @@ class Corrida:
             for n, nombres, r in todos:
                 if r == ruta or r.startswith(ruta + "/"):
                     self.nodos.append({"rubro": rubro, "id": n["id"], "nombres": nombres, "ruta": r,
-                                       "hijos": [c["url"].replace(BASE, "") for c in n.get("children", [])]})
+                                       "hijos": [urllib.parse.urlparse(c["url"]).path for c in n.get("children", [])]})
         log(f"árbol: {len(self.nodos)} categorías en el alcance")
 
     @staticmethod

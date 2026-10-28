@@ -73,6 +73,10 @@ SERIES = {
     "badlar": {"tab": "BADLAR", "fecha_col": "FECHA", "valor_col": "VALOR"},
     "tamar": {"tab": "TAMAR", "fecha_col": "FECHA", "valor_col": "VALOR"},
     "uso_justicia": {"tab": "USO_JUSTICIA", "fecha_col": "FECHA", "valor_col": "VALOR"},
+    # Financiamiento (Juan, 2026-10-16): descubierto del BNA y descuento de certificados.
+    "bna_tasas": {"tab": "BNA_TASAS", "fecha_col": "FECHA", "valor_col": "DESCUBIERTO_NO_SOLICITADO"},
+    "cert_bna_tna_grandes": {"tab": "CERT_BNA_TNA_GRANDES", "fecha_col": "FECHA", "valor_col": "VALOR"},
+    "cert_bna_tna_mipyme": {"tab": "CERT_BNA_TNA_MIPYME", "fecha_col": "FECHA", "valor_col": "VALOR"},
     "tm20": {"tab": "TM20", "fecha_col": "FECHA", "valor_col": "VALOR"},
     "adelantos_grandes": {"tab": "ADELANTOS_GRANDES", "fecha_col": "FECHA", "valor_col": "VALOR"},
     "baibar": {"tab": "BAIBAR", "fecha_col": "FECHA", "valor_col": "VALOR"},
@@ -163,6 +167,9 @@ CAUCION_TAB = "CAUCION"
 # Familias con más de una columna elegible dentro de la misma hoja (ej.
 # "construccion:MATERIALES" o "cac:MANO_DE_OBRA") — se suman a SERIES, que
 # solo permite una columna fija por familia.
+BNA_TASAS_COLUMNAS_LISTA = ("DESCUBIERTO_NO_SOLICITADO", "DESCUBIERTO_SOLICITADO",
+                            "DESCUBIERTO_HIPOTECARIA", "ADELANTOS_ACUERDO", "CARTERA_GENERAL",
+                            "PF30_SUCURSAL", "PF30_ELECTRONICO", "PF30_EMPRESAS")
 SERIES_MULTI_COLUMNA = {
     "apymeco": {"tab": "APYMECO", "fecha_col": "FECHA",
                       "columnas": ["INDICE_GENERAL", "MATERIALES", "MANO_DE_OBRA", "PROVISIONES"]},
@@ -171,6 +178,9 @@ SERIES_MULTI_COLUMNA = {
     # Indicador Vial de CAMARCO (obra vial tipo, dic-01 = 100), sin y con
     # gastos financieros. Juan, 2026-10-01: «en camarco súmame el índice vial».
     # Se carga con api/cargar_camarco_vial.py (todavía sin scraper).
+    # Tasas activas del Banco de la Nación (relevadas a diario, ver refrescar_bna_tasas).
+    "bna_tasas": {"tab": "BNA_TASAS", "fecha_col": "FECHA",
+                  "columnas": list(BNA_TASAS_COLUMNAS_LISTA)},
     "camarco_vial": {"tab": "CAMARCO_VIAL", "fecha_col": "FECHA",
                      "columnas": ["SIN_GF", "CON_GF"]},
     # "uocra:OFICIAL", "uocra:SERENO", etc. — para la calculadora de mano de
@@ -218,12 +228,11 @@ SERIES_TASAS = {
 # policy de lectura para `anon`. Es lista blanca: una serie que no está acá no
 # se publica, y agregar un renglón acá ES publicar.
 #
-# ⚠ NO AGREGAR LAS SERIES `CERT_BNA_*` (índice de descuento de certificados).
-# Juan, 2026-09-11: *«la base de CAMARCO vamos a seguir relevándola, pero no la
-# vamos a publicar mientras no lo vean; solo publicamos el índice de costos»*.
-# De CAMARCO sale publicado únicamente el índice de COSTO DE CONSTRUCCIÓN (las
-# tres familias `cac:` de abajo) — eso se releva y se publica desde antes. El
-# índice T.E.M. de certificados se releva para uso interno y se queda adentro.
+# 2026-10-16, Juan: la página de Índices ahora tiene CLAVE, así que se publica
+# todo lo que antes se guardaba «para uso interno» —incluida la base de
+# CAMARCO (el candado del 11/09 se levantó)—. Entran el descubierto con
+# acuerdo del BNA y la tasa de descuento de certificados (TNA) en el mismo
+# formato que el resto: mes, año en curso, 12 meses…
 RESUMEN_SERIES = [
     ("UOCRA Oficial", "uocra"),
     ("RIPTE", "ripte"),
@@ -247,6 +256,9 @@ RESUMEN_SERIES = [
     ("Caución 1 día", "caucion:TASA_1D"),
     ("Caución 7 días", "caucion:TASA_7D"),
     ("Caución 30 días", "caucion:TASA_30D"),
+    ("BNA descubierto con acuerdo (TNA)", "bna_tasas:ADELANTOS_ACUERDO"),
+    ("Descuento de certificados · Grandes (TNA)", "cert_bna_tna_grandes"),
+    ("Descuento de certificados · MiPyME (TNA)", "cert_bna_tna_mipyme"),
 ]
 
 # Los proveedores de materiales ya NO se escriben acá: se le preguntan a la
@@ -281,12 +293,16 @@ SERIES_SIMPLES_SUPABASE = {
     "CER", "UVA", "UVI", "ICL", "INFLACION_INDEC", "BADLAR", "TAMAR", "BAIBAR",
     "DEPOSITOS_30D", "ADELANTOS_CTA_CTE", "PRESTAMOS_PERSONALES", "TIM",
     "RIESGO_PAIS", "MERVAL",
+    "CERT_BNA_TNA_GRANDES", "CERT_BNA_TNA_MIPYME",
+    # Las tres de mora estaban en SERIES_BCRA_DIARIAS pero NO acá: el job
+    # escribía en la Sheet vieja y la base se quedó en 09/09-10/09.
+    "USO_JUSTICIA", "TM20", "ADELANTOS_GRANDES",
 }
 SERIES_ANCHAS_SUPABASE = {
     "DOLAR", "UOCRA", "APYMECO", "CAC", "SALARIOS",
     "ICC_CABA", "ICC_BUENOS_AIRES", "ICC_CORDOBA", "ICC_SANTA_FE",
     "RIPTE", "CAUCION", "CHEQUES", "PAGARES",
-    "SMVM", "CAMARCO_VIAL",
+    "SMVM", "CAMARCO_VIAL", "BNA_TASAS",
 }
 SERIES_EN_SUPABASE = SERIES_SIMPLES_SUPABASE | SERIES_ANCHAS_SUPABASE
 REM_EN_SUPABASE = True
@@ -1639,6 +1655,51 @@ def refrescar_mano_obra():
                   % (nombre, type(e).__name__, str(e)[:110]))
 
 
+# Tasas del Banco de la Nación (Juan, 2026-10-16: «una línea de tasa de
+# descubierto Banco Nación»). ⚠ EL BNA SOLO PUBLICA LO VIGENTE HOY: cada corrida
+# agrega UN día y el que no corre no se recupera (ver scrapers/bna_tasas.py).
+# Una serie ANCHA —una columna por producto— con la TNA vigente de cada uno.
+BNA_TASAS_COLUMNAS = {
+    "BNA_CARTERA_GENERAL": "CARTERA_GENERAL",
+    "BNA_ADELANTOS_ACUERDO": "ADELANTOS_ACUERDO",
+    "BNA_DESCUBIERTO_SOLICITADO": "DESCUBIERTO_SOLICITADO",
+    "BNA_DESCUBIERTO_NO_SOLICITADO": "DESCUBIERTO_NO_SOLICITADO",
+    "BNA_DESCUBIERTO_HIPOTECARIA": "DESCUBIERTO_HIPOTECARIA",
+    "BNA_PF30_SUCURSAL": "PF30_SUCURSAL",
+    "BNA_PF30_ELECTRONICO": "PF30_ELECTRONICO",
+    "BNA_PF30_EMPRESAS": "PF30_EMPRESAS",
+}
+
+
+def refrescar_bna_tasas():
+    from datetime import date as _date
+    from scrapers import bna_tasas
+    fila = {"FECHA": _date.today().isoformat()}
+    # Cada parte aislada: si cae la página de plazo fijo, las activas igual entran.
+    for nombre, fn in (("activas", bna_tasas.fetch_activas), ("pasiva", bna_tasas.fetch_pasiva)):
+        try:
+            for r in fn():
+                col = BNA_TASAS_COLUMNAS.get(r.get("serie"))
+                if col and r.get("tna") is not None:
+                    fila[col] = r["tna"]
+        except Exception as e:
+            print(f"[scheduler] BNA_TASAS/{nombre} NO se pudo: {type(e).__name__}: {str(e)[:110]}")
+    if len(fila) == 1:
+        print("[scheduler] BNA_TASAS sin datos hoy")
+        return
+    n = _guardar_ancha("BNA_TASAS", list(BNA_TASAS_COLUMNAS.values()), [fila])
+    print(f"[scheduler] BNA_TASAS +{n} filas (descubierto no solicitado {fila.get('DESCUBIERTO_NO_SOLICITADO')} % TNA)")
+
+
+def refrescar_certificados():
+    """Índice/TNA de descuento de certificados (CAMARCO). Baja solo si CAMARCO
+    republicó (compara URLs); casi siempre termina en «sin novedad»."""
+    import cargar_camarco_certificados as cc
+    r = cc.sincronizar()
+    print("[scheduler] CERT_BNA " + (f"cargado hasta {r['ultimo_dia']} ({r['dias']} días)"
+          if r["nuevo"] else f"sin novedad, vigente el de {r['publicado']} (dato hasta {r.get('ultimo_dia')})"))
+
+
 FUENTES_MANUALES = {
     "bcra_diarias": refrescar_bcra_diarias,
     "bcra_mensuales": refrescar_bcra_mensuales,
@@ -1657,6 +1718,8 @@ FUENTES_MANUALES = {
     "salarios": refrescar_salarios,
     "icc": refrescar_icc,
     "indec_op": refrescar_indec_op,
+    "bna_tasas": refrescar_bna_tasas,
+    "certificados": refrescar_certificados,
     "publicar_resumen": publicar_resumen,
     # ⚠ ULTIMA A PROPOSITO: escribe en Drive y sale a CAMARCO y ARCA, asi que
     # es la mas lenta y la que mas puede fallar. Si reventara, las otras ya
@@ -1689,6 +1752,8 @@ _SERIE_DE_FUENTE = {
     "dolar": ("DOLAR", "OFICIAL_VENTA"), "caucion": ("CAUCION", "TASA_1D"),
     "mav": ("CHEQUES", "NO_GARANTIZADO_CORTO"), "riesgo_pais": ("RIESGO_PAIS", "_"),
     "merval": ("MERVAL", "_"), "tim": ("TIM", "_"),
+    "bna_tasas": ("BNA_TASAS", "DESCUBIERTO_NO_SOLICITADO"),
+    "certificados": ("CERT_BNA_TNA_GRANDES", "_"),
 }
 
 
@@ -1739,6 +1804,10 @@ def iniciar_scheduler():
     sched.add_job(refrescar_riesgo_pais, "cron", hour=9)
     sched.add_job(refrescar_merval, "cron", hour=20)  # después del cierre de rueda
     sched.add_job(refrescar_tim, "cron", hour=9, minute=15)
+    sched.add_job(refrescar_bna_tasas, "cron", hour=10)
+    # CAMARCO republica cada días/semanas: dos veces por semana alcanza (ver
+    # cargar_camarco_certificados.sincronizar).
+    sched.add_job(refrescar_certificados, "cron", day_of_week="tue,fri", hour=10, minute=30)
 
     # Mensual, ~día 18 — todas derivan de un único dato mensual (IPC/RIPTE);
     # pedirlas más seguido no trae información nueva.

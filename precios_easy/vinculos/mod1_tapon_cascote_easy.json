@@ -1,0 +1,18 @@
+{
+ "proveedor": "EASY",
+ "id_proveedor": "251",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Easy/Precios Easy - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Easy/Precios Easy - Precios H3506.csv",
+ "origen": "EASY:precios_easy",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {
+   "cod_sibra": "P05GE405",
+   "id_producto": "EASY-1323675",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Dema · Tapón 3/4 (línea epoxi para gas)"
+  }
+ ]
+}

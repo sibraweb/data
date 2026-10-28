@@ -1,0 +1,123 @@
+{
+ "proveedor": "bercomat",
+ "id_proveedor": "96",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Bercomat/Precios Bercomat - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Bercomat/Precios Bercomat - Precios.csv",
+ "origen": "BERCOMAT:precios_bercomat",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {
+   "cod_sibra": "P47LS020",
+   "id_producto": "BERCOMAT-500859001",
+   "coef": "1",
+   "presentacion": "3,66 m",
+   "nota": "Larguero TX 3,66"
+  },
+  {
+   "cod_sibra": "P47LS040",
+   "id_producto": "BERCOMAT-500873001",
+   "coef": "1",
+   "presentacion": "3,05 m",
+   "nota": "Perimetral TX 3,05"
+  },
+  {
+   "cod_sibra": "P47LS060",
+   "id_producto": "BERCOMAT-500891001",
+   "coef": "1",
+   "presentacion": "1,22 m",
+   "nota": "Travesaño TX 1,22"
+  },
+  {
+   "cod_sibra": "P47LS061",
+   "id_producto": "BERCOMAT-500890001",
+   "coef": "1",
+   "presentacion": "0,61 m",
+   "nota": "Travesaño TX 0,61"
+  },
+  {
+   "cod_sibra": "P47LR202",
+   "id_producto": "BERCOMAT-611489001",
+   "coef": "1/2",
+   "presentacion": "placa 0,60x1,22",
+   "nota": "PLACO · Placa desmontable blanca (1 placa = 2 de 0,61x0,61)"
+  },
+  {
+   "cod_sibra": "P03CP005",
+   "id_producto": "BERCOMAT-509305001",
+   "coef": "1/2",
+   "presentacion": "2 kg",
+   "nota": "WEB · Pastina Classic Nieve 2 kg"
+  },
+  {
+   "cod_sibra": "P31CE002",
+   "id_producto": "BERCOMAT-678617001",
+   "coef": "1",
+   "presentacion": "m2",
+   "nota": "CSL · Cerámico Forte Blanco 33x33 (no hay 30x30)"
+  },
+  {
+   "cod_sibra": "P25TF006",
+   "id_producto": "BERCOMAT-512378001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "TEL · Tarugo con tope Nº8 (precio por unidad)"
+  },
+  {
+   "cod_sibra": "P21PA004b",
+   "id_producto": "BERCOMAT-500084001",
+   "coef": "1",
+   "presentacion": "barra",
+   "nota": "Ángulo 1 x 1/8"
+  },
+  {
+   "cod_sibra": "P33CE102",
+   "id_producto": "BERCOMAT-682011001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "FV Armonia · Toallero barral"
+  },
+  {
+   "cod_sibra": "P33CE103",
+   "id_producto": "BERCOMAT-682014001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "FV Armonia · Jabonera"
+  },
+  {
+   "cod_sibra": "P33CE105",
+   "id_producto": "BERCOMAT-682012001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "FV Armonia · Percha"
+  },
+  {
+   "cod_sibra": "P33CE106",
+   "id_producto": "BERCOMAT-682014001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "FV Armonia · Jabonera (la base pide con agarradera)"
+  },
+  {
+   "cod_sibra": "P33CE107",
+   "id_producto": "BERCOMAT-682014001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "FV Armonia · Jabonera"
+  },
+  {
+   "cod_sibra": "P33CE108",
+   "id_producto": "BERCOMAT-682015001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "FV Armonia · Portavaso / cepillos"
+  },
+  {
+   "cod_sibra": "P33CE109",
+   "id_producto": "BERCOMAT-682013001",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "FV Armonia · Portarrollo"
+  }
+ ]
+}

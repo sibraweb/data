@@ -1,0 +1,81 @@
+{
+ "proveedor": "EASY",
+ "id_proveedor": "251",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Easy/Precios Easy - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Easy/Precios Easy - Precios H3506.csv",
+ "origen": "EASY:precios_easy",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {
+   "cod_sibra": "P51TI001",
+   "id_producto": "EASY-1193369",
+   "coef": "1/20",
+   "presentacion": "balde 20 L",
+   "nota": "línea Alba · Látex Interior Blanco Mate"
+  },
+  {
+   "cod_sibra": "P51TC001",
+   "id_producto": "EASY-1166962",
+   "coef": "1/20",
+   "presentacion": "balde 20 L",
+   "nota": "línea Alba · Látex Interior Extra Mate (cielorraso)"
+  },
+  {
+   "cod_sibra": "P51TE001",
+   "id_producto": "EASY-1392092",
+   "coef": "1/20",
+   "presentacion": "balde 20 L",
+   "nota": "línea Alba · Duralba Impermeabilizante Frentes (exterior)"
+  },
+  {
+   "cod_sibra": "P51ES000",
+   "id_producto": "EASY-1121216",
+   "coef": "1/4",
+   "presentacion": "lata 4 L",
+   "nota": "línea Alba · Albalux Diamante Blanco Brillante"
+  },
+  {
+   "cod_sibra": "P51ES105",
+   "id_producto": "EASY-1006134",
+   "coef": "1",
+   "presentacion": "lata 1 L",
+   "nota": "línea Alba · Esmalte Brillante Blanco Ultra Resistencia (antióxido)"
+  },
+  {
+   "cod_sibra": "P51WD001",
+   "id_producto": "EASY-1144476",
+   "coef": "1/3.6",
+   "presentacion": "envase 3,6 L",
+   "nota": "Casablanca · Aguarrás Universal (Alba no lo vende en Easy)"
+  },
+  {
+   "cod_sibra": "P51WP001",
+   "id_producto": "EASY-1479037",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "McCarthy · Rodillo Nº22 simil lana pelo largo"
+  },
+  {
+   "cod_sibra": "P51WP002",
+   "id_producto": "EASY-1478557",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "McCarthy · Rodillo mini Nº5 poliéster"
+  },
+  {
+   "cod_sibra": "P51WL012",
+   "id_producto": "EASY-1172706",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Hunter · Lija al agua Nº180"
+  },
+  {
+   "cod_sibra": "P51WL001",
+   "id_producto": "EASY-1172709",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Hunter · Lija antiempaste Nº120 23x28"
+  }
+ ]
+}

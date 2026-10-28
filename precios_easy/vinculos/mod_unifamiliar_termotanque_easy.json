@@ -1,0 +1,18 @@
+{
+ "proveedor": "EASY",
+ "id_proveedor": "251",
+ "zona": "H3506",
+ "csv_insumos": "H:/My Drive/Precios Easy/Precios Easy - Insumos.csv",
+ "csv_precios": "H:/My Drive/Precios Easy/Precios Easy - Precios H3506.csv",
+ "origen": "EASY:precios_easy",
+ "lugar": "Resistencia (CP 3506)",
+ "vinculos": [
+  {
+   "cod_sibra": "P27AT000",
+   "id_producto": "EASY-1299565",
+   "coef": "1",
+   "presentacion": "unidad",
+   "nota": "Vesubio · Termotanque eléctrico 60 L 1500 W blanco TE60 (sin stock en H3506 al 13/10; Arnoldi pedía 53 L, no se vende)"
+  }
+ ]
+}
