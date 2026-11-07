@@ -118,9 +118,10 @@ def main(argv):
             print(f"      (por la puerta del ERP: {'nuevo' if r.get('nuevo') else 'ya existía'})")
         elif not ya:
             ult_vin += 1
-            db.execute("insert into vinculos_precios (id, id_vinculo, id_proveedor, nombre_proveedor, cod_prov, "
+            # El id lo pone la base: max(id)+1 dejaba atras su contador (07/11/2026).
+            db.execute("insert into vinculos_precios (id_vinculo, id_proveedor, nombre_proveedor, cod_prov, "
                        "desc_prov, un_prov, cod_sibra, desc_sibra, coef, activo, notas, fecha_actualizacion) "
-                       "values ((select coalesce(max(id),0)+1 from vinculos_precios),%s,%s,%s,%s,%s,%s,%s,%s,%s,'1',%s,%s)",
+                       "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,'1',%s,%s)",
                        (f"VIN-{ult_vin:05d}", cfg["id_proveedor"], cfg["proveedor"], pid, desc_prov,
                         v.get("presentacion", ""), cod, s["descripcion"], coef, notas, hoy))
             nv += 1
