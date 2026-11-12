@@ -31,7 +31,8 @@ from datetime import date
 from fractions import Fraction
 from pathlib import Path
 
-sys.path.insert(0, r"C:\Users\juanb\OneDrive\Desktop\Proyectos CODE\sibra-obra-repo\api")
+# Relativa a la carpeta del código, que cambia en cada PC (ver actualizar_vinculados.py).
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sibra-obra-repo" / "api"))
 import db  # noqa: E402
 
 try:
