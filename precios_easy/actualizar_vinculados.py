@@ -25,7 +25,9 @@ from datetime import date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-sys.path.insert(0, r"C:\Users\juanb\OneDrive\Desktop\Proyectos CODE\sibra-obra-repo\api")
+# La carpeta del código cambia en cada PC (en la dedicada, C:\Proyectos CODE): la ruta fija a
+# la de Juan hacía fallar `precios_vinculados` allá desde el 19/10 («No module named 'db'»).
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sibra-obra-repo" / "api"))
 import db  # noqa: E402
 import precios_bercomat as pb  # noqa: E402
 import precios_easy as pe  # noqa: E402
