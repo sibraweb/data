@@ -166,6 +166,18 @@ class Bloqueado(Exception):
 _n_pedidos = 0
 
 
+# ⚠ 20/11/2026: en la dedicada Bercomat daba «CERTIFICATE_VERIFY_FAILED: unable to get local
+# issuer certificate» y quedaban 2 zonas sin cubrir. El Windows recién instalado no tiene esa raíz
+# (la baja recién cuando la pide un navegador, y Python no la pide). Con las raíces de certifi
+# anda en cualquier PC; si certifi no está, queda el comportamiento de antes.
+try:
+    import ssl as _ssl
+    import certifi as _certifi
+    _CTX = _ssl.create_default_context(cafile=_certifi.where())
+except Exception:
+    _CTX = None
+
+
 def pedir(url, cuerpo=None, intentos=3):
     global _n_pedidos
     datos = json.dumps(cuerpo).encode() if cuerpo is not None else None
@@ -176,7 +188,7 @@ def pedir(url, cuerpo=None, intentos=3):
             "User-Agent": UA, "Accept": "application/json",
             **({"Content-Type": "application/json"} if datos else {})})
         try:
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with urllib.request.urlopen(req, timeout=60, context=_CTX) as r:
                 txt = r.read().decode("utf-8")
             if txt.lstrip().startswith("<"):
                 raise Bloqueado(f"devolvió HTML en vez de datos (¿desafío/CAPTCHA?): {url}")
@@ -315,6 +327,11 @@ class Corrida:
         self.facetas = {}            # url_categoria → (nodo, [filas]) sólo las que se leyeron bien
         self.stats_nodo = {}         # url → dict
         self.gross_vistos = set()    # todos los importes CON IVA vistos: no pueden aparecer escritos
+        # ⚠ 20/11/2026: el control compara cada fila con los importes CON IVA de SU producto.
+        # Contra los de toda la corrida, una promo de $60.000 neto de un producto (traída de
+        # una corrida anterior) chocó con un precio de $60.000 con IVA de OTRO de los 27.000,
+        # y se descartó la corrida entera (falla en la dedicada desde el 12/11).
+        self.gross_por_id = {}       # "EASY-<ref>" → {importes con IVA de ese producto}
         self.netos_calculados = set()
 
     def problema(self, que, motivo):
@@ -579,6 +596,7 @@ class Corrida:
                 p["pend"] = "Easy no devolvió precio para el CP 3506"
                 continue
             self.gross_vistos |= {f"{s['lista']:.2f}", f"{s['venta']:.2f}"}
+            self.gross_por_id.setdefault(f"EASY-{p['ref']}", set()).update({f"{s['lista']:.2f}", f"{s['venta']:.2f}"})
             a, motivo = verificar_iva(p["sin_imp"], s["lista"], s["venta"])
             if a is None:
                 p["pend"] = motivo
@@ -770,12 +788,12 @@ def auditar_iva(c, salida):
                     continue
                 if not re.fullmatch(r"\d+\.\d{2}", v):
                     errores.append(f"{k}/{col}: valor no numérico {v!r}")
-                elif v in c.gross_vistos and v not in c.netos_calculados:
+                elif v in c.gross_por_id.get(r.get("ID_INSUMO"), ()) and v not in c.netos_calculados:
                     errores.append(f"{k}/{col}: {v} coincide con un precio CON IVA de esta corrida ({r.get('ID_INSUMO')})")
     for r in salida["insumos"]:
         obs = r.get("OBSERVACIONES") or ""
         for num in re.findall(r"\d[\d.,]*", obs):
-            if num.replace(".", "").replace(",", ".") in c.gross_vistos:
+            if num.replace(".", "").replace(",", ".") in c.gross_por_id.get(r.get("ID_INSUMO"), ()):
                 errores.append(f"OBSERVACIONES de {r.get('ID_INSUMO')} menciona un importe con IVA ({num})")
     return errores
 
