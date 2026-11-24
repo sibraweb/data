@@ -472,6 +472,37 @@ const SbIndices = (() => {
     return out;
   }
 
+  // ── Historial últimas 5 publicaciones REM (espejo de api/rem_historial.py) ─
+  // Aditivo: lo usa solo la vista "Evolución de expectativas REM". Lee las
+  // curvas congeladas de rem_publicaciones (las escribe el server al refrescar
+  // el REM); si falta alguna (o la tabla), la arma igual que el server: datos
+  // de ESE relevamiento + IPC real anterior al mes de la encuesta.
+  const REM_HISTORIAL_N = 5;
+  async function historialRem() {
+    const guardadas = {};
+    try {
+      const filas = await conCache('rem_pub', () => SibraSB.selectAll(
+        'rem_publicaciones?select=fecha_pronostico,curva&order=fecha_pronostico.desc'));
+      for (const f of filas) guardadas[f.fecha_pronostico] = { fecha_pronostico: f.fecha_pronostico, curva: f.curva };
+    } catch (_) { /* tabla todavía no creada: se arma al vuelo */ }
+    const [remIpc, remIa] = await Promise.all([leerRem('ipc'), leerRem('ipc_interanual')]);
+    const fechas = [...new Set([...remIpc, ...remIa].map(r => String(r.FECHA_PRONOSTICO).slice(0, 10)))]
+      .sort().reverse().slice(0, REM_HISTORIAL_N);
+    let reales = null;
+    for (const fp of fechas) {
+      if (guardadas[fp]) continue;
+      if (!reales) reales = await leer('INFLACION_INDEC');
+      const corte = `${fp.slice(0, 7)}-01`;
+      const deFp = rs => rs.filter(r => String(r.FECHA_PRONOSTICO).slice(0, 10) === fp && r.MEDIANA !== null)
+        .map(r => ({ PERIODO: r.PERIODO, MEDIANA: Number(r.MEDIANA) }));
+      const realesFp = reales.filter(r => r.VALOR !== null && r.VALOR !== '' && String(r.FECHA).slice(0, 10) < corte)
+        .map(r => ({ PERIODO: r.FECHA, VALOR: r.VALOR }));
+      guardadas[fp] = { fecha_pronostico: fp, curva: construirCurvaMensual(realesFp, deFp(remIpc), deFp(remIa)) };
+    }
+    const publicaciones = Object.keys(guardadas).sort().reverse().slice(0, REM_HISTORIAL_N).map(fp => guardadas[fp]);
+    return { publicaciones };
+  }
+
   // ── Proyección (espejo de api/proyeccion.py) ─────────────────────────────
   // resample("ME").last(): último valor de cada mes, clave 'YYYY-MM'.
   function serieMensual(records, fechaCol, valorCol) {
@@ -676,6 +707,7 @@ const SbIndices = (() => {
         const curva = construirCurvaMensual(reales, remMensual, curvaInteranual);
         return ok({ relevamiento_anual: relevamientoAnual, curva, resumen_anual: resumenPorAnio(curva, curvaInteranual) });
       }
+      if (tipo === 'historial') return ok(await historialRem());
       if (tipo !== 'ipc' && tipo !== 'fx') return err(404, `tipo desconocido: ${tipo}`);
       const [relevamiento, curva] = await curvaRemActual(tipo);
       return ok({ relevamiento, curva });

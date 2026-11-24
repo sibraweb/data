@@ -676,6 +676,49 @@ def upsert_rem_bulk(tipo: str, registros: list[dict]) -> int:
     return max(insertadas, 0)
 
 
+# ── Historial congelado de publicaciones REM (schema_rem_publicaciones.sql) ──
+# Tabla aparte de rem_forecast: la vista "Evolución de expectativas REM" lee
+# de acá y nada de lo existente la toca.
+
+def leer_rem_publicaciones() -> list[dict]:
+    """[{fecha_pronostico, datos, curva}] de la más nueva a la más vieja."""
+    cached = _cache_get("rem_pub")
+    if cached is not None:
+        return cached
+    with _conectar() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT fecha_pronostico, datos, curva FROM rem_publicaciones "
+                        "ORDER BY fecha_pronostico DESC")
+            rows = cur.fetchall()
+    out = [{"fecha_pronostico": r["fecha_pronostico"].isoformat(),
+            "datos": r["datos"], "curva": r["curva"]} for r in rows]
+    _cache_set("rem_pub", out)
+    return out
+
+
+def guardar_rem_publicacion(pub: dict, conservar: int = 5) -> bool:
+    """Guarda una publicación UNA sola vez (si ya está, no la pisa: queda
+    congelada) y deja solo las `conservar` más recientes. True si era nueva."""
+    from psycopg.types.json import Jsonb
+    with _conectar() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO rem_publicaciones (fecha_pronostico, datos, curva)
+                   VALUES (%s, %s, %s) ON CONFLICT (fecha_pronostico) DO NOTHING""",
+                (pub["fecha_pronostico"], Jsonb(pub["datos"]), Jsonb(pub["curva"])),
+            )
+            nueva = cur.rowcount == 1
+            cur.execute(
+                """DELETE FROM rem_publicaciones WHERE fecha_pronostico NOT IN (
+                     SELECT fecha_pronostico FROM rem_publicaciones
+                     ORDER BY fecha_pronostico DESC LIMIT %s)""",
+                (conservar,),
+            )
+        conn.commit()
+    _cache_bust("rem_pub")
+    return nueva
+
+
 def leer_uocra_adicionales() -> list[dict]:
     key = "uocra_adicionales"
     cached = _cache_get(key)

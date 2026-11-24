@@ -273,7 +273,14 @@ const REM_SERIES = [
   { value: 'ipc_anual', label: 'Inflación anual (REM dic/dic, por año)' },
   { value: 'combinada', label: 'Curva mensual combinada (real + REM + repartido)' },
   { value: 'fx', label: 'Tipo de cambio ($/USD, curva próximos ~12 meses)' },
+  { value: 'historial', label: 'Evolución de expectativas REM (últimas 5 publicaciones)' },
 ];
+
+// Vista "Evolución de expectativas REM": la publicación más reciente en rojo y
+// las 4 anteriores en grises cada vez más claros (índice 0 = la más nueva).
+const COLORES_HISTORIAL_REM = ['#E53935', '#424242', '#757575', '#9E9E9E', '#D1D1D1'];
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const etiquetaRem = fp => `REM ${MESES_CORTOS[+fp.slice(5, 7) - 1]}-${fp.slice(0, 4)}`;
 
 const FUENTE_LABEL = {
   real: 'Real (INDEC)',
@@ -1126,6 +1133,90 @@ async function calcularPersonalizado() {
   }
 }
 
+// Evolución de expectativas REM (últimas 5 publicaciones). Vista NUEVA y
+// aparte: no usa dibujar() ni dibujarCurvaCombinada(). Cada curva es la
+// curva mensual de UNA publicación (congelada, ver api/rem_historial.py),
+// todas sobre el mismo eje de meses calendario y la misma escala.
+// pubs: [{fecha_pronostico, curva: [{periodo, valor_pct, fuente}]}], más nueva primero.
+function dibujarHistorialRem(id, pubs, rango) {
+  const ctx = document.getElementById(`chart-${id}`);
+  if (charts[id]) charts[id].destroy();
+  const leyendaEl = document.getElementById(`leyenda-${id}`);
+  if (leyendaEl) leyendaEl.innerHTML = '';
+  if (!pubs || !pubs.length) {
+    charts[id] = new Chart(ctx, { type: 'line', data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false } });
+    return;
+  }
+
+  const fechas = new Set();
+  pubs.forEach(p => p.curva.forEach(c => fechas.add(c.periodo.slice(0, 10))));
+  let labels = Array.from(fechas).sort();
+  if (!rango || rango === 'todo') {
+    // Predeterminado: 4 años de historia hasta la publicación más reciente,
+    // más todo el horizonte proyectado.
+    const fp = pubs[0].fecha_pronostico;
+    const desde = `${+fp.slice(0, 4) - 4}-${fp.slice(5, 7)}-01`;
+    labels = labels.filter(f => f >= desde);
+  } else {
+    labels = filtrarPorRango(labels.map(f => ({ fecha: f })), rango).map(p => p.fecha);
+  }
+
+  const mapas = pubs.map(p => new Map(p.curva.map(c => [c.periodo.slice(0, 10), c])));
+  const datasets = pubs.map((p, i) => ({
+    label: etiquetaRem(p.fecha_pronostico),
+    data: labels.map(f => (mapas[i].has(f) ? Number(mapas[i].get(f).valor_pct) : null)),
+    borderColor: COLORES_HISTORIAL_REM[i] || COLORES_HISTORIAL_REM[COLORES_HISTORIAL_REM.length - 1],
+    backgroundColor: COLORES_HISTORIAL_REM[i] || COLORES_HISTORIAL_REM[COLORES_HISTORIAL_REM.length - 1],
+    borderWidth: i === 0 ? 2.5 : 1.75,
+    pointRadius: 0,
+    pointHoverRadius: 4,
+    pointHitRadius: 8,
+    tension: 0.15,
+    spanGaps: false,
+    order: i, // la más reciente se dibuja arriba
+  }));
+
+  const fmt = n => Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  charts[id] = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        // Leyenda interactiva (clic = mostrar/ocultar esa publicación).
+        legend: { display: true, labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+          callbacks: {
+            title: (items) => {
+              const f = items[0]?.label || '';
+              return f ? `${MESES_CORTOS[+f.slice(5, 7) - 1]}-${f.slice(0, 4)} · IPC mensual` : '';
+            },
+            label: (item) => {
+              if (item.raw === null || item.raw === undefined) return null;
+              const i = item.datasetIndex;
+              const c = mapas[i].get(labels[item.dataIndex]);
+              const origen = c && c.fuente === 'real' ? ' (real)' : '';
+              let txt = `${item.dataset.label}: ${fmt(item.raw)} %${origen}`;
+              const ant = datasets[i + 1]?.data[item.dataIndex];
+              if (ant !== null && ant !== undefined) {
+                const d = item.raw - ant;
+                txt += `  (Δ ${d >= 0 ? '+' : ''}${fmt(d)} pp vs ${datasets[i + 1].label})`;
+              }
+              return txt;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 12 } },
+        y: { title: { display: true, text: 'IPC mensual (%)' } },
+      },
+    },
+  });
+}
+
 async function obtenerEstimacionesRem() {
   const r = await pedir(`/api/rem/estimaciones`);
   const data = await r.json();
@@ -1658,6 +1749,21 @@ async function cargarVentana(v) {
     const extraEl = document.getElementById(`rem-extra-${v.id}`);
     extraEl.innerHTML = '';
     try {
+      if (tipo === 'historial') {
+        const r = await pedir(`/api/rem/historial`);
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+        const pubs = data.publicaciones || [];
+        if (!pubs.length) {
+          estadoEl.textContent = 'Sin datos todavía (correr el refresh de REM).';
+          dibujarHistorialRem(v.id, []);
+          return;
+        }
+        estadoEl.textContent = `Evolución de expectativas REM · ${pubs.map(p => etiquetaRem(p.fecha_pronostico)).join(', ')} · `
+          + 'IPC mensual (%) por mes calendario; cada curva usa el IPC real que se conocía a la fecha de su encuesta.';
+        dibujarHistorialRem(v.id, pubs, rango);
+        return;
+      }
       if (tipo === 'ipc_anual') {
         const r = await pedir(`/api/rem/anual`);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);

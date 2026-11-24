@@ -51,6 +51,7 @@ import sheets
 from ajuste import ajustar
 from proyeccion import estimar_modelo, proyectar
 from rem_estimaciones import construir_curva_mensual, resumen_por_anio
+from rem_historial import CANTIDAD as REM_HISTORIAL_N, armar_publicacion, fechas_publicaciones
 from resumen import resumen_serie
 from resumen import variacion as calcular_variacion
 from scrapers import (apymeco, argentinadatos, bcra, bcra_rem, camarco, cauciones,
@@ -764,6 +765,49 @@ def get_rem_estimaciones():
         "curva": curva,
         "resumen_anual": resumen_anual,
     })
+
+
+# ── Historial de las últimas 5 publicaciones REM (vista aparte) ────────────
+# Aditivo: no lo usa ninguna de las rutas de arriba. Ver api/rem_historial.py.
+
+def _historial_rem(persistir: bool = True) -> list[dict]:
+    """Las últimas REM_HISTORIAL_N publicaciones, de la más nueva a la más
+    vieja. Las ya guardadas en rem_publicaciones se devuelven tal cual
+    (congeladas); las que falten se arman con la metodología existente y,
+    si `persistir`, se guardan (la más vieja primero, así la poda deja 5)."""
+    if REM_EN_SUPABASE:
+        rem_ipc, rem_ia = db.leer_rem("ipc"), db.leer_rem("ipc_interanual")
+    else:
+        rem_ipc = sheets.read_records(_sheet_id(), REM_TABS["ipc"])
+        rem_ia = sheets.read_records(_sheet_id(), REM_INTERANUAL_TAB)
+    guardadas: dict[str, dict] = {}
+    if REM_EN_SUPABASE:
+        try:
+            guardadas = {p["fecha_pronostico"]: p for p in db.leer_rem_publicaciones()}
+        except Exception as e:  # tabla todavía no creada: se arma al vuelo
+            print(f"[rem_historial] sin rem_publicaciones ({e}); se arma al vuelo")
+            persistir = False
+    reales = None
+    for fp in sorted(fechas_publicaciones(rem_ipc, rem_ia)):
+        if fp in guardadas:
+            continue
+        if reales is None:
+            reales = _leer("INFLACION_INDEC")
+        pub = armar_publicacion(fp, rem_ipc, rem_ia, reales)
+        guardadas[fp] = pub
+        if persistir and REM_EN_SUPABASE:
+            try:
+                db.guardar_rem_publicacion(pub, REM_HISTORIAL_N)
+            except Exception as e:
+                print(f"[rem_historial] no se pudo guardar {fp}: {e}")
+    return [guardadas[fp] for fp in sorted(guardadas, reverse=True)[:REM_HISTORIAL_N]]
+
+
+@app.route("/api/rem/historial")
+def get_rem_historial():
+    pubs = _historial_rem()
+    return jsonify({"publicaciones": [
+        {"fecha_pronostico": p["fecha_pronostico"], "curva": p["curva"]} for p in pubs]})
 
 
 # ── Proyección (relación histórica con CER/dólar + curva REM) ──────────────
@@ -1624,6 +1668,13 @@ def refrescar_rem():
             f["CLAVE"] = f"{f['FECHA_PRONOSTICO']}|{f['PERIODO']}"
         n2 = sheets.upsert_series(sid, REM_INTERANUAL_TAB, REM_INTERANUAL_HEADERS, "CLAVE", interanual)
     print(f"[scheduler] {REM_INTERANUAL_TAB} +{n2} filas")
+
+    # Aditivo: congela la publicación nueva (si la hay) en el historial de 5.
+    # Un fallo acá no debe tumbar el refresh del REM de siempre.
+    try:
+        _historial_rem(persistir=True)
+    except Exception as e:
+        print(f"[scheduler] historial REM ⚠ {e}")
 
 
 def refrescar_mano_obra():
