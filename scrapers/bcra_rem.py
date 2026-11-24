@@ -18,9 +18,13 @@ import re
 import openpyxl
 import requests
 
+# ⚠ 2026-11-24: el BCRA RENOMBRÓ el archivo. El viejo
+# (historico-relevamiento-expectativas-mercado.xlsx) sigue contestando 200
+# pero quedó congelado el 03/09/2026 (último REM: agosto), así que el refresh
+# "andaba" sin traer nada nuevo. Mismo formato, mismas hojas.
 URL = (
     "https://www.bcra.gob.ar/archivos/Pdfs/PublicacionesEstadisticas/"
-    "informes/historico-relevamiento-expectativas-mercado.xlsx"
+    "informes/relevamiento-expectativas-mercado-historico.xlsx"
 )
 
 # (Variable, Referencia) tal como aparecen en la hoja "Base de Datos Completa"
