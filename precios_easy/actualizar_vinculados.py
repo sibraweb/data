@@ -142,7 +142,10 @@ def main():
                 log(f"  {'→' if escribir else '·'} {cod_prov:20} ${precio:>11,.2f}  ({marca})  {destinos}")
                 if igual and args.aplicar and ult[0]["fecha"][:10] != date.today().isoformat():
                     hoy = date.today().isoformat()
-                    db.execute("update cotizaciones set fecha=%s, fecha_carga=%s where id=%s", (hoy, hoy, ult[0]["id"]))
+                    # Edad del precio (Juan, 25/11/2026): `fecha` pasa a ser el último control y `fecha_desde`
+                    # guarda la primera vez que se vio este precio (se fija acá, antes de pisar la fecha).
+                    db.execute("update cotizaciones set fecha_desde=coalesce(nullif(fecha_desde,''), fecha), "
+                               "fecha=%s, fecha_carga=%s where id=%s", (hoy, hoy, ult[0]["id"]))
                     pisadas += 1
                 if escribir and args.aplicar:
                     n = (db.query("select max(substring(id from 5)::int) m from cotizaciones where id ~ '^COT-[0-9]+$'")[0]["m"] or 0) + 1
@@ -150,10 +153,11 @@ def main():
                     s = db.query("select descripcion, unidad from insumos where cod_sibra=%s", (v0["cod_sibra"],))[0]
                     hoy = date.today().isoformat()
                     db.execute("insert into cotizaciones (id, cod_insumo, descripcion, unidad, fecha, precio, moneda, id_proveedor, "
-                               "proveedor, lugar_entrega, notas, origen, usuario, fecha_carga, cod_prov) "
-                               "values (%s,%s,%s,%s,%s,%s,'ARS',%s,%s,%s,%s,%s,%s,%s,%s)",
+                               "proveedor, lugar_entrega, notas, origen, usuario, fecha_carga, cod_prov, fecha_desde) "
+                               "values (%s,%s,%s,%s,%s,%s,'ARS',%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                                (f"COT-{n:05d}", v0["cod_sibra"], s["descripcion"], s["unidad"], hoy, f"{precio:.4f}", idp, nombre,
-                                "Resistencia (CP 3506)", f"{nombre} {zona} neto · {marca}", origen, "actualizar-vinculados", hoy, cod_prov))
+                                "Resistencia (CP 3506)", f"{nombre} {zona} neto · {marca}", origen, "actualizar-vinculados", hoy, cod_prov,
+                                hoy))
                     nuevas += 1
         log(f"cotizaciones nuevas (el precio cambió): {nuevas} · fechas al día (mismo precio): {pisadas}")
     d = st / "logs"
