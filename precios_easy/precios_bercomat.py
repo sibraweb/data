@@ -120,6 +120,10 @@ class Corrida:
         self.filtros = {}         # cp_guardado → {url: [filas]}
         self.nodos = {}           # cp_guardado → [(filtros, total)]
         self.gross_vistos = set()
+        # ⚠ el control de IVA compartido (precios_easy.auditar_iva) compara cada fila con los
+        # importes CON IVA de SU producto desde el 20/11 (19e8aeb); Bercomat no lo tenía y la
+        # corrida se caía al final con AttributeError, después de bajar todo (26/11/2026).
+        self.gross_por_id = {}       # "BERCOMAT-<ref>" → {importes con IVA de ese producto}
         self.netos_calculados = set()
 
     def problema(self, que, motivo):
@@ -267,6 +271,8 @@ class Corrida:
                     continue
                 venta = o["venta"] if o["venta"] and o["venta"] > 0 else o["lista"]
                 self.gross_vistos |= {f"{o['lista']:.2f}", f"{venta:.2f}"}
+                self.gross_por_id.setdefault(f"BERCOMAT-{p['ref']}", set()).update(
+                    {f"{o['lista']:.2f}", f"{venta:.2f}"})
                 lista = max(o["lista"], venta)
                 o["neto_lista"], o["neto_venta"] = neto(lista, IVA), neto(venta, IVA)
                 o["promo"] = venta < lista - D("0.005")
