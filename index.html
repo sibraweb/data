@@ -59,6 +59,17 @@
   table.tabla-resumen th, table.tabla-resumen td { padding: 9px 12px; text-align: right; border-bottom: 1px solid var(--gray-300); white-space: nowrap; }
   table.tabla-resumen th:first-child, table.tabla-resumen td:first-child { text-align: left; }
   table.tabla-resumen th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--gray-700); }
+  /* Resumen (2026-11-26): botonera de ajuste y tabla que entra entera, sin
+     scroll horizontal (con 3 y 6 meses son 12 columnas). */
+  .botonera-ajuste { display: inline-flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--gray-300); border-radius: 6px; overflow: hidden; }
+  .botonera-ajuste button { background: var(--white); color: var(--ink); border: 0; border-right: 1px solid var(--gray-300); border-radius: 0; padding: 7px 12px; font-size: 13px; cursor: pointer; }
+  .botonera-ajuste button:last-child { border-right: 0; }
+  .botonera-ajuste button.activo { background: var(--red); color: #fff; font-weight: 600; }
+  #ventana-resumen .tabla-wrap { padding: 8px 8px; }
+  #ventana-resumen table.tabla-resumen { font-size: 12px; table-layout: auto; }
+  #ventana-resumen table.tabla-resumen th, #ventana-resumen table.tabla-resumen td { padding: 7px 5px; }
+  #ventana-resumen table.tabla-resumen th { white-space: normal; vertical-align: bottom; }
+  #ventana-resumen table.tabla-resumen td:first-child { white-space: normal; min-width: 130px; }
   .pos { color: var(--green); font-weight: 600; }
   .neg { color: var(--red); font-weight: 600; }
   .ventana h3 { font-size: 15px; margin: 0 0 12px; color: var(--ink); border-bottom: 2px solid var(--red); padding-bottom: 6px; }
@@ -184,6 +195,9 @@ const RANGOS = [
   { value: 'mtd', label: 'MTD (desde 1° del mes)' },
   { value: '1m', label: 'Último mes' },
 ];
+// Proyecciones (REM) suma "Últimos 3 años" (pedido de Juan, 2026-11-26): un
+// corte entre 5 años y 1 año. Las demás pestañas siguen con RANGOS.
+const RANGOS_REM = [...RANGOS.slice(0, 2), { value: '3a', label: 'Últimos 3 años' }, ...RANGOS.slice(2)];
 
 function filtrarPorRango(puntos, rango) {
   if (!puntos || !puntos.length || !rango || rango === 'todo') return puntos;
@@ -191,6 +205,7 @@ function filtrarPorRango(puntos, rango) {
   let desde;
   switch (rango) {
     case '5a': desde = new Date(ultima); desde.setFullYear(desde.getFullYear() - 5); break;
+    case '3a': desde = new Date(ultima); desde.setFullYear(desde.getFullYear() - 3); break;
     case '1a': desde = new Date(ultima); desde.setFullYear(desde.getFullYear() - 1); break;
     case '6m': desde = new Date(ultima); desde.setMonth(desde.getMonth() - 6); break;
     case 'ytd': desde = new Date(ultima.getFullYear(), 0, 1); break;
@@ -373,6 +388,19 @@ const tabsEl = document.getElementById('tabs');
 const ventanasEl = document.getElementById('ventanas');
 let proveedoresMateriales = {};
 let resumenFilas = [];
+// Resumen "en términos de" (pedido de Juan, 2026-11-26). Nominal por defecto,
+// como siempre. Cada serie ÷ el índice elegido (mismo ajustar() que el
+// "Ajustar por" de las demás pestañas); tasas y puntos quedan nominales.
+const RESUMEN_AJUSTES = [
+  { value: 'ninguno', label: 'Nominal' },
+  { value: 'dolar_oficial', label: 'Dólar oficial' },
+  { value: 'dolar_mep', label: 'Dólar MEP' },
+  { value: 'cer', label: 'CER' },
+  { value: 'ipc', label: 'IPC' },
+];
+let resumenAjuste = 'ninguno';
+const etiquetaAjusteResumen = () =>
+  `valores ÷ ${RESUMEN_AJUSTES.find(a => a.value === resumenAjuste)?.label} (último valor = cociente; variaciones en términos reales de ese índice)`;
 
 function crearSelect(id, opciones, labelKey, valueKey) {
   const opts = opciones.map(o =>
@@ -460,6 +488,11 @@ function render() {
       return `
         <section class="ventana${i === 0 ? ' active' : ''}" id="ventana-${v.id}">
           <div class="controles">
+            <div class="campo"><label>Valores</label>
+              <div class="botonera-ajuste" id="resumen-ajuste">
+                ${RESUMEN_AJUSTES.map(a => `<button type="button" data-ajuste="${a.value}" class="${a.value === 'ninguno' ? 'activo' : ''}">${a.label}</button>`).join('')}
+              </div>
+            </div>
             <div class="campo"><label>Desde</label><input type="date" id="resumen-desde"></div>
             <div class="campo"><label>Hasta</label><input type="date" id="resumen-hasta"></div>
             <div class="campo"><label>Monto a ajustar</label><input type="number" id="resumen-monto" placeholder="opcional" step="0.01" style="width:130px"></div>
@@ -470,7 +503,7 @@ function render() {
             <table class="tabla-resumen">
               <thead><tr>
                 <th>Índice</th><th>Último valor</th><th>Fecha</th>
-                <th>Mes (MoM)</th><th>Año (YTD)</th><th>Interanual (YoY)</th>
+                <th>Mes (MoM)</th><th>3 meses</th><th>6 meses</th><th>Año (YTD)</th><th>Interanual (YoY)</th>
                 <th>YoY anualizada</th><th>5 años</th><th>Personalizado</th><th>Monto ajustado</th>
               </tr></thead>
               <tbody id="tbody-resumen"></tbody>
@@ -673,7 +706,7 @@ function render() {
           ${v.esCertificados ? '' : `
           <div class="campo">
             <label>Rango</label>
-            ${crearSelect(`sel-rango-${v.id}`, RANGOS, 'label', 'value')}
+            ${crearSelect(`sel-rango-${v.id}`, v.esRem ? RANGOS_REM : RANGOS, 'label', 'value')}
           </div>
           `}
           ${v.esMora ? `
@@ -1096,11 +1129,14 @@ function pintarResumen(filas, personalizados) {
     const ajustado = (monto && isFinite(monto) && coef != null)
       ? (monto * coef).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : '—';
+    const nota = f.sin_ajuste ? ' <span style="color:var(--gray-700);font-size:11px">(tasa/puntos: sin ajustar)</span>' : '';
     return `<tr>
-      <td>${f.nombre}</td>
+      <td>${f.nombre}${nota}</td>
       <td>${fmtNum(f.ultimo_valor, 4)}</td>
       <td>${f.ultima_fecha || '—'}</td>
       ${celdaPct(f.mom)}
+      ${celdaPct(f.m3)}
+      ${celdaPct(f.m6)}
       ${celdaPct(f.ytd)}
       ${celdaPct(f.yoy)}
       ${celdaPct(f.yoy_anualizada)}
@@ -1120,14 +1156,15 @@ async function calcularPersonalizado() {
   try {
     const resultados = await Promise.all(resumenFilas.map(async f => {
       try {
-        const r = await pedir(`/api/variacion?familia=${encodeURIComponent(f.familia)}&desde=${desde}&hasta=${hasta}`);
+        const ind = (resumenAjuste !== 'ninguno' && !f.sin_ajuste) ? `&indice=${resumenAjuste}` : '';
+        const r = await pedir(`/api/variacion?familia=${encodeURIComponent(f.familia)}&desde=${desde}&hasta=${hasta}${ind}`);
         if (!r.ok) return [f.familia, null];
         return [f.familia, await r.json()];
       } catch { return [f.familia, null]; }
     }));
     const mapa = Object.fromEntries(resultados);
     pintarResumen(resumenFilas, mapa);
-    estadoEl.textContent = `Variación personalizada: ${desde} → ${hasta}`;
+    estadoEl.textContent = `Variación personalizada: ${desde} → ${hasta}${resumenAjuste !== 'ninguno' ? ` · ${etiquetaAjusteResumen()}` : ''}`;
   } catch (err) {
     estadoEl.textContent = 'No se pudo calcular la variación personalizada.';
     estadoEl.classList.add('error');
@@ -1696,11 +1733,27 @@ async function cargarVentana(v) {
 
   if (v.esResumen) {
     try {
-      const r = await pedir(`/api/resumen`);
+      const ajusteVigente = resumenAjuste;
+      if (ajusteVigente !== 'ninguno') estadoEl.textContent = 'Calculando ajuste…';
+      const r = await pedir(ajusteVigente === 'ninguno' ? `/api/resumen` : `/api/resumen?ajuste=${ajusteVigente}`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      resumenFilas = await r.json();
+      const filas = await r.json();
+      if (ajusteVigente !== resumenAjuste) return;   // se apretó otro botón mientras tanto
+      resumenFilas = filas;
+      resumenPersonalizados = null;   // el personalizado era de otro ajuste
       pintarResumen(resumenFilas);
-      estadoEl.textContent = 'Actualizado';
+      estadoEl.textContent = ajusteVigente === 'ninguno' ? 'Actualizado' : `Actualizado · ${etiquetaAjusteResumen()}`;
+      // La foto diaria de la página publicada no trae 3 y 6 meses: se completan
+      // aparte, sin frenar la tabla.
+      if (resumenFilas.some(f => f.m3 === undefined)) {
+        pedir(`/api/resumen?calcular=1`).then(async rc => {
+          if (!rc.ok || resumenAjuste !== 'ninguno') return;
+          const calc = new Map((await rc.json()).map(f => [f.familia, f]));
+          resumenFilas = resumenFilas.map(f => ({ ...f, m3: calc.get(f.familia)?.m3 ?? null, m6: calc.get(f.familia)?.m6 ?? null }));
+          pintarResumen(resumenFilas);
+        }).catch(() => {});
+      }
+      if (document.getElementById('resumen-desde').value && document.getElementById('resumen-hasta').value) calcularPersonalizado();
       // ⚠ ADENTRO de esta rama y sin await: la rama termina en `return`, asi
       // que una llamada puesta mas abajo en el dispatcher nunca se alcanzaba
       // —lo probe y la tabla quedaba vacia sin decir nada—. Sin await para que
@@ -2052,6 +2105,11 @@ async function init() {
     sel.addEventListener('change', () => cargarVentana(VENTANAS.find(v => `sel-item-${v.id}` === sel.id)));
   });
   document.getElementById('resumen-calcular')?.addEventListener('click', calcularPersonalizado);
+  document.querySelectorAll('#resumen-ajuste button').forEach(b => b.addEventListener('click', () => {
+    resumenAjuste = b.dataset.ajuste;
+    document.querySelectorAll('#resumen-ajuste button').forEach(x => x.classList.toggle('activo', x === b));
+    cargarVentana(VENTANAS.find(v => v.esResumen));
+  }));
   // Reajusta la columna "Monto ajustado" al vuelo, con los coeficientes ya calculados.
   document.getElementById('resumen-monto')?.addEventListener('input', () => {
     if (resumenFilas?.length) pintarResumen(resumenFilas);

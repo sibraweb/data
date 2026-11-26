@@ -366,6 +366,52 @@ const SbIndices = (() => {
     };
   }
 
+  // ── Resumen calculado en el navegador (espejo de resumen.py:resumen_serie) ─
+  // 2026-11-26. El /api/resumen de siempre lee la FOTO diaria
+  // (indices_resumen_publico), que es nominal y no tiene 3/6 meses. Esto lo
+  // usa solo el Resumen ajustado (?ajuste=) y el relleno de las columnas
+  // 3 y 6 meses (?calcular=1); el camino de la foto no cambia.
+  const RESUMEN_NO_AJUSTABLES = ['caucion:', 'bna_tasas:', 'cert_bna_tna', 'riesgo_pais'];
+  const RESUMEN_AJUSTES = new Set(['dolar_oficial', 'dolar_mep', 'cer', 'ipc']);
+  function menosMeses(s, n) {
+    const total = +s.slice(0, 4) * 12 + (+s.slice(5, 7) - 1) - n;
+    const a = Math.floor(total / 12), m = total % 12 + 1;
+    const ultimoDia = new Date(Date.UTC(a, m, 0)).getUTCDate();   // pandas DateOffset recorta al fin de mes
+    const d = Math.min(+s.slice(8, 10), ultimoDia);
+    return `${String(a).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+  function resumenSerieJS(serie) {
+    if (!serie.length) return null;
+    const ult = serie[serie.length - 1], uf = ult.fecha, uv = ult.valor;
+    const periodos = {
+      mom: finMesAnterior(uf), d30: menosDias(uf, 30), ytd: `${+uf.slice(0, 4) - 1}-12-31`,
+      yoy: menosMeses(uf, 12), a5: menosMeses(uf, 60), m3: menosMeses(uf, 3), m6: menosMeses(uf, 6),
+    };
+    const out = { ultima_fecha: uf, ultimo_valor: redondear(uv, 6) };
+    for (const [k, f] of Object.entries(periodos)) {
+      const ini = enOAntes(serie, f);
+      out[k] = ini && ini.valor ? redondear((uv / ini.valor - 1) * 100, 2) : null;
+    }
+    const iy = enOAntes(serie, periodos.yoy);
+    const dias = iy ? diasEntre(iy.fecha, uf) : 0;
+    out.yoy_anualizada = iy && iy.valor > 0 && dias > 0 ? redondear(((uv / iy.valor) ** (365 / dias) - 1) * 100, 2) : null;
+    return out;
+  }
+  async function resumenCalculado(ajuste) {
+    const idx = ajuste !== 'ninguno' ? await serieIndice(ajuste) : null;
+    return Promise.all(RESUMEN_SERIES.map(async ([nombre, familia]) => {
+      try {
+        const base = await resolverFamilia(familia);
+        if (!base) return { familia, nombre };
+        const noAjustable = RESUMEN_NO_AJUSTABLES.some(p => familia.startsWith(p));
+        const serie = (idx && !noAjustable)
+          ? ajustar(base.records, idx.records, base.fechaCol, base.valorCol, idx.fechaCol, idx.valorCol, 'ratio')
+          : aSerie(base.records, base.fechaCol, base.valorCol);
+        return { familia, nombre, ...(resumenSerieJS(serie) || {}), ...(idx && noAjustable ? { sin_ajuste: true } : {}) };
+      } catch (_) { return { familia, nombre }; }
+    }));
+  }
+
   // ── Financiamiento (server.py:452) ───────────────────────────────────────
   async function financiamiento() {
     const salida = {};
@@ -613,6 +659,9 @@ const SbIndices = (() => {
 
     // Resumen: el snapshot que publica el job (server.py:845 publicar_resumen).
     if (camino === '/api/resumen') {
+      const ajuste = q.get('ajuste') || 'ninguno';
+      if (ajuste !== 'ninguno' && !RESUMEN_AJUSTES.has(ajuste)) return err(404, `ajuste desconocido: ${ajuste}`);
+      if (ajuste !== 'ninguno' || q.get('calcular')) return ok(await resumenCalculado(ajuste));
       const { filas } = await SibraSB.rest(
         'indices_resumen_publico?select=*&order=fecha_publicacion.desc&limit=1');
       if (!filas.length) return err(422, 'todavía no hay resumen publicado');

@@ -81,6 +81,8 @@ def resumen_serie(records: list[dict], fecha_col: str, valor_col: str) -> dict |
       yoy  = inter-anual     -> v(corte) / v(corte - 12 meses) - 1
       yoy_anualizada = TIR no periódica -> (v(corte)/v(corte-12m))^(365/días) - 1
       a5   = 5 años          -> v(corte) / v(corte - 5 años) - 1
+      m3 / m6 = últimos 3 / 6 meses -> v(corte) / v(corte - 3|6 meses) - 1
+                (agregados 2026-11-26; publicar_resumen() no los guarda)
     """
     df = _to_df(records, fecha_col, valor_col)
     if df.empty:
@@ -95,6 +97,8 @@ def resumen_serie(records: list[dict], fecha_col: str, valor_col: str) -> dict |
         "ytd": pd.Timestamp(year=ultima_fecha.year - 1, month=12, day=31),
         "yoy": ultima_fecha - pd.DateOffset(years=1),
         "a5": ultima_fecha - pd.DateOffset(years=5),
+        "m3": ultima_fecha - pd.DateOffset(months=3),
+        "m6": ultima_fecha - pd.DateOffset(months=6),
     }
 
     resultado = {

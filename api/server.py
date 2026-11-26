@@ -1189,13 +1189,34 @@ def get_ajustado():
 
 # ── Resumen (MTD/YTD/1A/5A/TIR + variación entre dos fechas cualquiera) ─────
 
+# Series del Resumen que son TASAS o PUNTOS, no precios: dividirlas por un
+# dólar o por el CER no tiene sentido. Con ?ajuste= se devuelven nominales y
+# marcadas `sin_ajuste` (ver es_resumen_sin_ajuste en el front).
+RESUMEN_NO_AJUSTABLES_PREFIJOS = ("caucion:", "bna_tasas:", "cert_bna_tna", "riesgo_pais")
+RESUMEN_AJUSTES = {"dolar_oficial", "dolar_mep", "cer", "ipc"}
+
+
 @app.route("/api/resumen")
 def get_resumen():
+    # ?ajuste= (2026-11-26): Resumen "en términos de" dólar oficial, MEP, CER o
+    # IPC — cada serie ÷ el índice con ajustar() (lo mismo que el selector
+    # "Ajustar por" de las otras pestañas). Sin parámetro, igual que siempre.
+    ajuste = request.args.get("ajuste") or "ninguno"
+    if ajuste != "ninguno" and ajuste not in RESUMEN_AJUSTES:
+        return jsonify({"error": f"ajuste desconocido: {ajuste}"}), 404
+    idx = _serie_indice(ajuste) if ajuste != "ninguno" else None
     filas = []
     for nombre, familia in RESUMEN_SERIES:
         records, fecha_col, valor_col = _resolver_familia(familia)
+        extra = {}
+        if idx and records:
+            if familia.startswith(RESUMEN_NO_AJUSTABLES_PREFIJOS):
+                extra = {"sin_ajuste": True}
+            else:
+                records = ajustar(records, idx[0], fecha_col, valor_col, idx[1], idx[2], modo="ratio")
+                fecha_col, valor_col = "fecha", "valor"
         r = resumen_serie(records or [], fecha_col or "FECHA", valor_col or "VALOR")
-        filas.append({"familia": familia, "nombre": nombre, **(r or {})})
+        filas.append({"familia": familia, "nombre": nombre, **(r or {}), **extra})
     return jsonify(filas)
 
 
